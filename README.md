@@ -2,10 +2,7 @@
 
 EvalForge is a workspace for evaluating LLM outputs. You build **datasets** of test cases, define **rubrics**, run **evaluations** against a real model, and review persisted results, failures and reports. It solves the "does this prompt/model actually still work?" problem with repeatable, auditable runs instead of ad-hoc spot checks.
 
-![EvalForge dashboard](<img width="1600" height="769" alt="image dash board" src="https://github.com/user-attachments/assets/70ee222b-cf7c-4f32-a5ac-9eaaf0576830" />
-)
-
-> Add `docs/dashboard.png`: capture it from a running instance of the current UI (not a mock-up).
+![EvalForge dashboard](https://github.com/user-attachments/assets/70ee222b-cf7c-4f32-a5ac-9eaaf0576830)
 
 ## Features
 
@@ -61,7 +58,7 @@ Generate a secret: `python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 ### Providers
 
-The UI never hard-codes model names: the Models and Settings pages show the model the backend is configured with (`OLLAMA_MODEL`, `GROQ_MODEL`).
+The Models page reports the providers configured on the backend and their configured model IDs. Ollama runs locally or on a separately reachable host; Groq is a hosted API provider. A configured provider/model is not proof that its credentials, network connection, or live inference are currently healthy—use the connection check and complete a real evaluation to verify it.
 
 - **PostgreSQL**: set `DATABASE_URL=postgresql+psycopg://user:pass@host:5432/evalforge`. Required in production. See [DATABASE.md](./DATABASE.md).
 - **Ollama**: install Ollama, `ollama pull llama3.2`, set `OLLAMA_BASE_URL` / `OLLAMA_MODEL`. See [OLLAMA.md](./OLLAMA.md).
@@ -78,6 +75,6 @@ pytest -q backend/tests/
 
 ## Deployment
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for Vercel (Services preset), required environment variables and the post-deploy checklist. Live URL: _add after deployment_.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for Vercel (Services preset), required environment variables and the post-deploy checklist. Live application: [https://evale-forge.vercel.app/](https://evale-forge.vercel.app/).
 
 Other docs: [AUTHENTICATION.md](./AUTHENTICATION.md), [OWNERSHIP.md](./OWNERSHIP.md), [DATABASE.md](./DATABASE.md).
