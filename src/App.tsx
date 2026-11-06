@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Activity, AlertTriangle, Bell, BookOpenCheck, Boxes, ChartNoAxesCombined, CircleHelp,
+  Activity, AlertTriangle, BookOpenCheck, Boxes, ChartNoAxesCombined,
   Command, Database, Gauge, GitCompareArrows, Layers3, Menu, Plus, Search, Settings2, Sparkles, X,
 } from 'lucide-react'
 import { api } from './services/api'
@@ -224,15 +224,13 @@ function Workspace({
           <div className="nav-group"><div className="nav-heading">Configure</div><NavLink to="/rubrics" className={({ isActive }) => `nav-link ${isActive ? 'nav-active' : ''}`}><Layers3 size={16} strokeWidth={1.8} /><span>Rubrics</span></NavLink><NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'nav-active' : ''}`}><Settings2 size={16} strokeWidth={1.8} /><span>Settings</span></NavLink></div>
         </div>
         <div className="sidebar-bottom">
-          
-          <button className="nav-link help-link" onClick={() => notify('Help center is ready for your team.')}><CircleHelp size={16} /><span>Help & support</span><Command size={12} /></button>
           <div className="profile-row"><span className="profile-avatar">{isDemo ? 'D' : user?.email.slice(0, 1).toUpperCase()}</span><span className="profile-copy"><strong>{isDemo ? 'Local Demo' : user?.email}</strong><small>{isDemo ? 'This browser only' : 'Authenticated account'}</small></span>{isDemo
             ? <button className="text-button" onClick={onExitDemo}>Exit</button>
             : <button className="text-button" onClick={() => void onLogout(false).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Sign out failed.'))}>Sign out</button>}</div>
         </div>
       </aside>
       <main className="main-shell">
-        <header className="topbar"><div className="topbar-left"><button className="menu-toggle icon-button" aria-label="Open navigation" onClick={() => setSidebarOpen(true)}><Menu size={18} /></button><div className="breadcrumb"><span>{isDemo ? 'Local Demo' : user?.email}</span><span className="crumb-slash">/</span><strong>{title}</strong></div><span className={`session-mode ${isDemo ? 'session-demo' : ''}`}>{isDemo ? 'DEMO · LOCAL ONLY' : 'LIVE · PRIVATE'}</span></div><div className="topbar-actions"><label className={`global-search ${mobileSearchOpen ? 'global-search-open' : ''}`} onKeyDown={(event) => { if (event.key === 'Escape') setMobileSearchOpen(false) }}><Search size={15} /><input value={globalSearch} onChange={(event) => handleSearch(event.target.value)} placeholder="Search anything..." /><kbd>⌘ K</kbd></label><button className="mobile-search-toggle icon-button" aria-label={mobileSearchOpen ? 'Close search' : 'Open search'} onClick={() => setMobileSearchOpen((open) => !open)}><Search size={17} /></button><button className="icon-button notification-button" aria-label="Notifications" onClick={() => notify('You’re all caught up.')}><Bell size={17} /><i /></button><Button variant="primary" size="sm" onClick={() => navigate('/evaluations/new')}><Plus size={15} /> New evaluation</Button>{!isDemo && <Button size="sm" onClick={() => void onLogout(true).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Sign out failed.'))}>Sign out all</Button>}</div></header>
+        <header className="topbar"><div className="topbar-left"><button className="menu-toggle icon-button" aria-label="Open navigation" onClick={() => setSidebarOpen(true)}><Menu size={18} /></button><div className="breadcrumb"><span>{isDemo ? 'Local Demo' : user?.email}</span><span className="crumb-slash">/</span><strong>{title}</strong></div><span className={`session-mode ${isDemo ? 'session-demo' : ''}`}>{isDemo ? 'DEMO · LOCAL ONLY' : 'LIVE · PRIVATE'}</span></div><div className="topbar-actions"><label className={`global-search ${mobileSearchOpen ? 'global-search-open' : ''}`} onKeyDown={(event) => { if (event.key === 'Escape') setMobileSearchOpen(false) }}><Search size={15} /><input value={globalSearch} onChange={(event) => handleSearch(event.target.value)} placeholder="Search anything..." /><kbd>⌘ K</kbd></label><button className="mobile-search-toggle icon-button" aria-label={mobileSearchOpen ? 'Close search' : 'Open search'} onClick={() => setMobileSearchOpen((open) => !open)}><Search size={17} /></button><Button variant="primary" size="sm" onClick={() => navigate('/evaluations/new')}><Plus size={15} /> New evaluation</Button>{!isDemo && <Button size="sm" onClick={() => void onLogout(true).catch((error: unknown) => notify(error instanceof Error ? error.message : 'Sign out failed.'))}>Sign out all</Button>}</div></header>
         <div className="content-area">
           <Routes>
             <Route path="/" element={<DashboardPage datasets={datasets.data as Dataset[]} cases={testCases.data as TestCase[]} runs={runs.data as EvaluationRun[]} failures={failures.data as Failure[]} onNavigate={navigate} />} />
