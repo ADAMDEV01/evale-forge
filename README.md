@@ -2,7 +2,8 @@
 
 EvalForge is a workspace for evaluating LLM outputs. You build **datasets** of test cases, define **rubrics**, run **evaluations** against a real model, and review persisted results, failures and reports. It solves the "does this prompt/model actually still work?" problem with repeatable, auditable runs instead of ad-hoc spot checks.
 
-![EvalForge dashboard](docs/dashboard.png)
+![EvalForge dashboard](<img width="1600" height="769" alt="image dash board" src="https://github.com/user-attachments/assets/70ee222b-cf7c-4f32-a5ac-9eaaf0576830" />
+)
 
 > Add `docs/dashboard.png`: capture it from a running instance of the current UI (not a mock-up).
 
