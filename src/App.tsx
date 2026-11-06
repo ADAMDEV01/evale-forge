@@ -3,7 +3,7 @@ import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'reac
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity, AlertTriangle, BookOpenCheck, Boxes, ChartNoAxesCombined,
-  Command, Database, Gauge, GitCompareArrows, Layers3, Menu, Plus, Search, Settings2, Sparkles, X,
+  Database, Gauge, GitCompareArrows, Layers3, Menu, Plus, Search, Settings2, Sparkles, X,
 } from 'lucide-react'
 import { api } from './services/api'
 import type { AuthUser } from './services/api'
