@@ -1,0 +1,35 @@
+# Environment variables and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local databases and SQLite sidecar files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Frontend dependencies and generated output
+node_modules/
+dist/
+coverage/
+
+# Temporary test outputs and generated logs
+test-output.txt
+tmp_pytest.txt
+*.log
