@@ -326,11 +326,11 @@ export function ModelsPage() {
   const groqConnected = Boolean(groqHealth.data?.available)
 
   return (
-        description="Check backend connectivity and the configured model for each provider before running a live evaluation."
+    <div className="page">
       <PageHeader
         eyebrow="ANALYZE / PROVIDERS"
         title="Models"
-        description="Monitor provider performance and configure the models your team evaluates."
+        description="Check backend connectivity and the configured model for each provider before running a live evaluation."
         actions={
           <Button
             variant="primary"
