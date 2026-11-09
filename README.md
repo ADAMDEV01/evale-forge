@@ -75,7 +75,7 @@ pytest -q backend/tests/
 
 ## Deployment
 
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for Vercel (Services preset), required environment variables and the post-deploy checklist. Live application: [https://evale-forge.vercel.app/](https://evale-forge.vercel.app/).
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for Vercel (Services preset), required environment variables and the post-deploy checklist. Live application: [https://evaleforge-22v5turff-addrryhby-5992.vercel.app](https://evaleforge-22v5turff-addrryhby-5992.vercel.app).
 
 Other docs: [AUTHENTICATION.md](./AUTHENTICATION.md), [OWNERSHIP.md](./OWNERSHIP.md), [DATABASE.md](./DATABASE.md).
 
@@ -91,3 +91,8 @@ Other docs: [AUTHENTICATION.md](./AUTHENTICATION.md), [OWNERSHIP.md](./OWNERSHIP
 ## Repository
 
 - Source code: https://github.com/ADAMDEV01/evale-forge
+
+## Live deployment
+
+- **Live application:** https://evaleforge-22v5turff-addrryhby-5992.vercel.app
+- **GitHub repository:** https://github.com/ADAMDEV01/evale-forge
