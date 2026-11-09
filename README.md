@@ -78,3 +78,16 @@ pytest -q backend/tests/
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for Vercel (Services preset), required environment variables and the post-deploy checklist. Live application: [https://evale-forge.vercel.app/](https://evale-forge.vercel.app/).
 
 Other docs: [AUTHENTICATION.md](./AUTHENTICATION.md), [OWNERSHIP.md](./OWNERSHIP.md), [DATABASE.md](./DATABASE.md).
+
+## Skills demonstrated
+
+- **Frontend:** React, TypeScript, Vite, TanStack Query, data visualization, reporting, and PDF/CSV export.
+- **Backend:** Python, FastAPI, REST APIs, provider abstraction, and persistent evaluation workflows.
+- **Data:** PostgreSQL, SQLAlchemy, Alembic migrations, datasets, test cases, rubrics, and evaluation records.
+- **AI evaluation:** Ollama, Groq, Exact Match, Keyword Match, rubric scoring, repeatable test runs, and result analysis.
+- **Security:** JWT authentication, Argon2id password hashing, rotating refresh tokens, and per-user data isolation.
+- **Quality & delivery:** pytest, Vitest, Docker Compose, GitHub Actions CI, and Vercel configuration.
+
+## Repository
+
+- Source code: https://github.com/ADAMDEV01/evale-forge
