@@ -7,7 +7,7 @@ from sqlalchemy import select
 from backend.app import main
 from backend.app.db import database
 from backend.app.jobs import evaluation_worker
-from backend.app.models.models import EvaluationJob, EvaluationResult, EvaluationRun
+from backend.app.models.models import EvaluationJob, EvaluationResult, EvaluationRun, User
 
 
 class QueueFakeProvider:
@@ -91,7 +91,7 @@ def test_worker_executes_queued_job_and_persists_real_results(client, monkeypatc
     queued = enqueue(client)
     provider = QueueFakeProvider(outputs=['Business plan', 'Business plan'])
     monkeypatch.setattr(main, 'create_provider', lambda *_args, **_kwargs: provider)
-    monkeypatch.setattr(evaluation_worker, 'HEARTBEAT_INTERVAL_SECONDS', 0.01)
+    monkeypatch.setattr(evaluation_worker, 'HEARTBEAT_INTERVAL_SECONDS', 60)
 
     assert evaluation_worker.run_once(worker_id='queue-test-worker') is True
 
@@ -206,7 +206,14 @@ def test_job_lookup_is_scoped_to_the_authenticated_owner(client, isolated_test_d
     with database.SessionLocal() as db:
         job = db.get(EvaluationJob, queued['jobId'])
         assert job is not None
-        job.user_id = 'different-user-id'
+        db.add(User(
+            id='different-user-id-00000000001',
+            email='other-user@example.invalid',
+            password_hash='test-hash',
+            is_active=True,
+        ))
+        db.flush()
+        job.user_id = 'different-user-id-00000000001'
         db.commit()
 
     response = client.get(f"/api/evaluate/jobs/{queued['jobId']}")
