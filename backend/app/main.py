@@ -1196,6 +1196,9 @@ def _execute_evaluation(
             db,
             user.id,
         )
+    except EvaluationLeaseLostError:
+        db.rollback()
+        raise
     except EvaluationCancelledError:
         db.refresh(run)
         run.status = 'Cancelled'
