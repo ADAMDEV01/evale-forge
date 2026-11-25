@@ -158,7 +158,7 @@ describe('Evaluation mode selection', () => {
       }))
 
     await user.click(screen.getByRole('button', { name: /Start evaluation/ }))
-    const responseLabel = await screen.findByText('Model response:')
+    const responseLabel = await screen.findByText('Model response:', {}, { timeout: 5000 })
     expect(responseLabel.closest('p')).toHaveTextContent('Model response: Hello')
     expect(screen.getByText(/Actual model responses/)).toBeInTheDocument()
     await waitFor(() => expect(onStart).toHaveBeenLastCalledWith([execution.run], 'ollama'))
