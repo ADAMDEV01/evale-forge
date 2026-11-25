@@ -183,9 +183,9 @@ class EvaluationJob(Base):
     __table_args__ = (
         CheckConstraint(
             "status IN ('Pending', 'Running', 'Completed', 'Failed', 'Cancelled')",
-            name='evaluation_jobs_status',
+            name='ck_evaluation_jobs_status',
         ),
-        CheckConstraint('attempts >= 0', name='evaluation_jobs_attempts_nonnegative'),
+        CheckConstraint('attempts >= 0', name='ck_evaluation_jobs_attempts_nonnegative'),
         UniqueConstraint('run_id', name='uq_evaluation_jobs_run_id'),
         Index('ix_evaluation_jobs_claim', 'status', 'available_at', 'locked_at'),
         Index('ix_evaluation_jobs_user_created', 'user_id', 'created_at'),
