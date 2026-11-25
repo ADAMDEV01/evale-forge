@@ -161,9 +161,42 @@ def test_worker_retries_transient_provider_error_without_duplicate_results(
 
     details = get_job(client, queued['jobId'])
     assert details['status'] == 'Completed'
+    assert details['run']['estimatedCost'] == 0.0
     assert len(details['results']) == 2
     assert second_provider.calls == 1
     assert details['results'][0]['id'] == first_result_id
+
+
+def test_stale_worker_cannot_persist_after_its_lease_is_transferred(
+    client,
+    monkeypatch,
+):
+    queued = enqueue(client, cases=1)
+
+    def transfer_lease():
+        with database.SessionLocal() as db:
+            job = db.get(EvaluationJob, queued['jobId'])
+            assert job is not None
+            job.lock_owner = 'replacement-worker'
+            db.commit()
+
+    provider = QueueFakeProvider(
+        outputs=['Business plan'],
+        on_first_response=transfer_lease,
+    )
+    monkeypatch.setattr(main, 'create_provider', lambda *_args, **_kwargs: provider)
+
+    assert evaluation_worker.run_once(worker_id='old-worker') is True
+
+    details = get_job(client, queued['jobId'])
+    assert details['status'] == 'Running'
+    assert details['progress'] == 0
+    assert details['results'] == []
+    with database.SessionLocal() as db:
+        job = db.get(EvaluationJob, queued['jobId'])
+        assert job is not None
+        assert job.lock_owner == 'replacement-worker'
+        assert job.attempts == 1
 
 
 def test_user_can_cancel_a_running_job_between_test_cases(client, monkeypatch):
