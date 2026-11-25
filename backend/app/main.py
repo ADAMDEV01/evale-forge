@@ -1208,16 +1208,11 @@ def _execute_evaluation(
         .where(EvaluationResult.run_id == run.id)
         .order_by(EvaluationResult.sequence)
     ).all()
-    summary = calculate_metrics([
-        {
-            'status': item.status,
-            'passed': item.passed,
-            'score': item.score,
-            'latency_ms': item.latency_ms,
-            'token_usage': item.token_usage,
-        }
-        for item in all_results
-    ]).model_dump()
+    # Keep provider cost estimates available on the first execution; they are
+    # held in the per-response rows before their aggregate is stored on the run.
+    # During a resumed attempt, already-persisted results have no per-case cost
+    # column, so their aggregate remains unavailable rather than being guessed.
+    summary = calculate_metrics(processed).model_dump()
     run.accuracy = summary['accuracy']
     run.pass_rate = summary['passRate']
     run.latency = int(summary['averageLatency'])
@@ -1359,7 +1354,10 @@ def enqueue_evaluation(
         created_at=now,
         updated_at=now,
     )
-    db.add_all([run, job])
+    # Flush the parent run first so the job FK is satisfied on every dialect.
+    db.add(run)
+    db.flush()
+    db.add(job)
     db.commit()
     return {
         'jobId': job.id,
