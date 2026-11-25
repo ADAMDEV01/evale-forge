@@ -5,7 +5,7 @@ import logging
 import uuid
 from types import SimpleNamespace
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
@@ -992,6 +992,8 @@ def _execute_evaluation(
     if existing_run is not None:
         run = existing_run
         run.status = 'Running'
+        run.error_type = None
+        run.error_message = None
         db.commit()
     else:
         run = EvaluationRun(
@@ -1249,6 +1251,192 @@ def evaluate(
     user: AuthenticatedUser,
 ):
     return _execute_evaluation(payload, db, user)
+
+
+@protected_router.post('/api/evaluate/jobs', status_code=202)
+def enqueue_evaluation(
+    payload: EvaluationRequest,
+    db: Annotated[Session, Depends(get_db)],
+    user: AuthenticatedUser,
+):
+    dataset = _owned_dataset(db, user, payload.datasetId)
+    cases = db.scalars(
+        select(TestCase).where(TestCase.dataset_id == dataset.id).order_by(TestCase.id)
+    ).all()
+    if not cases:
+        raise HTTPException(status_code=400, detail='Dataset has no test cases for evaluation.')
+
+    model = payload.model.strip() or (payload.models[0].strip() if len(payload.models) == 1 else '')
+    if payload.models and (len(payload.models) != 1 or payload.model.strip()):
+        raise HTTPException(status_code=422, detail='An evaluation requires exactly one model.')
+    if payload.evaluationMethod == 'exact_match' and any(not case.expected.strip() for case in cases):
+        raise HTTPException(status_code=422, detail='Exact Match requires an expected response for every test case.')
+    if payload.evaluationMethod == 'keyword_match' and any(
+        not _json_or(case.expected_keywords, []) for case in cases
+    ):
+        raise HTTPException(status_code=422, detail='Keyword Match requires expected keywords for every test case.')
+
+    rubric = None
+    criteria: list[dict[str, Any]] = []
+    if payload.evaluationMethod == 'rubric':
+        rubric = db.scalars(
+            select(Rubric).where(
+                Rubric.user_id == user.id,
+                (Rubric.id == payload.rubric) | (Rubric.name == payload.rubric),
+            )
+        ).first()
+        if rubric is None:
+            if db.get(Rubric, payload.rubric) is not None:
+                raise HTTPException(status_code=404, detail='Rubric not found')
+            raise HTTPException(status_code=422, detail=f'Rubric "{payload.rubric}" was not found.')
+        criteria = [
+            {
+                'name': criterion.name,
+                'weight': criterion.weight,
+                'description': criterion.description,
+                'scale': criterion.scale,
+                'expectedKeywords': _json_or(criterion.expected_keywords, []),
+            }
+            for criterion in rubric.criteria
+        ]
+        try:
+            evaluate_rubric('', criteria)
+        except (ValueError, KeyError, TypeError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    run_id = f'run_{uuid.uuid4().hex[:12]}'
+    job_id = f'job_{uuid.uuid4().hex[:12]}'
+    config = {
+        'provider': payload.provider,
+        'model': model,
+        'evaluationMethod': payload.evaluationMethod,
+        'temperature': payload.temperature,
+    }
+    run = EvaluationRun(
+        id=run_id,
+        user_id=user.id,
+        dataset_id=dataset.id,
+        dataset_name=dataset.name,
+        dataset_version=dataset.version,
+        model=model or 'configured Ollama model',
+        provider=payload.provider,
+        evaluation_method=payload.evaluationMethod,
+        rubric_id=rubric.id if rubric else None,
+        rubric_snapshot_json=json.dumps(
+            {'id': rubric.id, 'name': rubric.name, 'criteria': criteria} if rubric else {}
+        ),
+        status='Pending',
+        total=len(cases),
+        date=now.replace(tzinfo=timezone.utc).astimezone().isoformat(),
+        config_json=json.dumps(config),
+    )
+    snapshot = [
+        {
+            'id': case.id,
+            'title': case.title,
+            'category': case.category,
+            'input': case.input,
+            'expected': case.expected,
+            'expectedKeywords': _json_or(case.expected_keywords, []),
+        }
+        for case in cases
+    ]
+    job = EvaluationJob(
+        id=job_id,
+        run_id=run_id,
+        user_id=user.id,
+        payload_json=json.dumps({
+            'request': payload.model_dump(),
+            'cases': snapshot,
+        }),
+        status='Pending',
+        attempts=0,
+        available_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add_all([run, job])
+    db.commit()
+    return {
+        'jobId': job.id,
+        'status': job.status,
+        'attempts': job.attempts,
+        'progress': 0,
+        'run': _run_schema(run, 0).model_dump(),
+    }
+
+
+@protected_router.get('/api/evaluate/jobs/{job_id}')
+def get_evaluation_job(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: AuthenticatedUser,
+):
+    job = db.scalar(
+        select(EvaluationJob).where(
+            EvaluationJob.id == job_id,
+            EvaluationJob.user_id == user.id,
+        )
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail='Evaluation job not found')
+    run = _owned_run(db, user, job.run_id)
+    results = db.scalars(
+        select(EvaluationResult)
+        .where(EvaluationResult.run_id == run.id)
+        .order_by(EvaluationResult.sequence)
+    ).all()
+    metrics = calculate_metrics([
+        {
+            'status': item.status,
+            'passed': item.passed,
+            'score': item.score,
+            'latency_ms': item.latency_ms,
+            'token_usage': item.token_usage,
+        }
+        for item in results
+    ]).model_dump()
+    return {
+        'jobId': job.id,
+        'status': job.status,
+        'attempts': job.attempts,
+        'progress': round((len(results) / run.total) * 100) if run.total else 0,
+        'pending': max(0, run.total - len(results)),
+        'lastError': job.last_error,
+        'run': _run_schema(run, len(results)).model_dump(),
+        'results': [_result_schema(item).model_dump() for item in results],
+        'metrics': metrics,
+        'errors': sum(1 for item in results if item.status == 'Error'),
+    }
+
+
+@protected_router.post('/api/evaluate/jobs/{job_id}/cancel')
+def cancel_evaluation_job(
+    job_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: AuthenticatedUser,
+):
+    job = db.scalar(
+        select(EvaluationJob)
+        .where(
+            EvaluationJob.id == job_id,
+            EvaluationJob.user_id == user.id,
+        )
+        .with_for_update()
+    )
+    if job is None:
+        raise HTTPException(status_code=404, detail='Evaluation job not found')
+    if job.status == 'Pending':
+        job.status = 'Cancelled'
+        job.last_error = None
+        run = _owned_run(db, user, job.run_id)
+        run.status = 'Cancelled'
+        db.commit()
+    elif job.status == 'Running':
+        job.cancel_requested = True
+        db.commit()
+    return {'jobId': job.id, 'status': job.status, 'cancelRequested': job.cancel_requested}
 
 
 app.include_router(auth_router)
