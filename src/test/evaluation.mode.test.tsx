@@ -120,37 +120,81 @@ describe('Evaluation mode selection', () => {
     expect(mode).toHaveValue('mock')
   })
 
-  it('displays actual Ollama responses after evaluation completes', async () => {
+  it('displays actual Ollama responses after the queued evaluation completes', async () => {
     const onStart = vi.fn().mockResolvedValue(undefined)
     renderWizard(onStart)
     const user = await openOllamaReview()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => execution,
-    }))
+    const queuedRun = { ...execution.run, status: 'Pending' as const }
+    const queued = {
+      jobId: 'job-live',
+      status: 'Pending',
+      attempts: 0,
+      progress: 0,
+      pending: 1,
+      lastError: null,
+      run: queuedRun,
+      results: [],
+      metrics: execution.metrics,
+      errors: 0,
+    }
+    const completed = {
+      ...queued,
+      status: 'Completed',
+      progress: 100,
+      pending: 0,
+      run: execution.run,
+      results: execution.results,
+    }
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: async () => queued,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => completed,
+      }))
 
     await user.click(screen.getByRole('button', { name: /Start evaluation/ }))
     const responseLabel = await screen.findByText('Model response:')
     expect(responseLabel.closest('p')).toHaveTextContent('Model response: Hello')
     expect(screen.getByText(/Actual model responses/)).toBeInTheDocument()
-    expect(onStart).toHaveBeenCalledWith([execution.run], 'ollama')
+    await waitFor(() => expect(onStart).toHaveBeenLastCalledWith([execution.run], 'ollama'))
   }, 15000)
 
-  it('shows a real request loading state without simulated progress', async () => {
-    renderWizard()
+  it('shows the durable queue state without displaying simulated progress', async () => {
+    const onStart = vi.fn().mockResolvedValue(undefined)
+    renderWizard(onStart)
     const user = await openOllamaReview()
     let resolveRequest!: (response: Response) => void
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { resolveRequest = resolve })))
 
     await user.click(screen.getByRole('button', { name: /Start evaluation/ }))
-    expect(await screen.findByText('Live provider request running')).toBeInTheDocument()
-    expect(screen.getByText(/no simulated progress/i)).toBeInTheDocument()
+    expect(await screen.findByText('Evaluation queued')).toBeInTheDocument()
+    expect(screen.getByText('Persisted evaluation progress')).toBeInTheDocument()
+    expect(screen.getByText(/progress is based on persisted test-case results/i)).toBeInTheDocument()
+
+    const queuedRun = { ...execution.run, status: 'Pending' as const }
     resolveRequest({
       ok: true,
-      json: async () => execution,
+      status: 202,
+      json: async () => ({
+        jobId: 'job-pending',
+        status: 'Pending',
+        attempts: 0,
+        progress: 0,
+        pending: 1,
+        lastError: null,
+        run: queuedRun,
+        results: [],
+        metrics: execution.metrics,
+        errors: 0,
+      }),
     } as Response)
-    await waitFor(() => expect(screen.getByText('Evaluation complete')).toBeInTheDocument())
-  })
+    await waitFor(() => expect(onStart).toHaveBeenCalledWith([queuedRun], 'ollama'))
+  }, 15000)
 
   it('shows provider errors and never silently falls back to mock evaluation', async () => {
     renderWizard()
