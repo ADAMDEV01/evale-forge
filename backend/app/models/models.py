@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.database import Base
@@ -175,6 +175,42 @@ class EvaluationRun(Base):
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
     results: Mapped[list['EvaluationResult']] = relationship(back_populates='run', cascade='all, delete-orphan')
+
+
+
+class EvaluationJob(Base):
+    __tablename__ = 'evaluation_jobs'
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('Pending', 'Running', 'Completed', 'Failed', 'Cancelled')",
+            name='ck_evaluation_jobs_status',
+        ),
+        CheckConstraint('attempts >= 0', name='ck_evaluation_jobs_attempts_nonnegative'),
+        UniqueConstraint('run_id', name='uq_evaluation_jobs_run_id'),
+        Index('ix_evaluation_jobs_claim', 'status', 'available_at', 'locked_at'),
+        Index('ix_evaluation_jobs_user_created', 'user_id', 'created_at'),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    run_id: Mapped[str] = mapped_column(
+        ForeignKey('evaluation_runs.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default='Pending')
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
+    locked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    lock_owner: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 
 
 class EvaluationResult(Base):

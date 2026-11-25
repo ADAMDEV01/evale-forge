@@ -12,6 +12,7 @@ EvalForge is a workspace for evaluating LLM outputs. You build **datasets** of t
 - Real evaluation with **Ollama** (self-hosted) and **Groq** (hosted).
 - Scoring methods: Exact Match, Keyword Match, Rubric Scoring.
 - Results, failures, token usage and cost estimates persisted in the database; reports and PDF/CSV export.
+- Durable PostgreSQL evaluation queue with worker leases, heartbeats, bounded retries, resumable test-case execution, progress polling, and cancellation.
 - Alembic migrations, backend (pytest) and frontend (Vitest) tests, Docker/Compose, Vercel config, GitHub Actions CI.
 
 ## Mock vs Real evaluation
@@ -30,13 +31,14 @@ EvalForge is a workspace for evaluating LLM outputs. You build **datasets** of t
 Browser (React + Vite)
    │  /api  (same origin on Vercel)
    ▼
-FastAPI backend ──► PostgreSQL (SQLite for local dev/tests only)
-   │
-   ├──► Ollama  (OLLAMA_BASE_URL)
-   └──► Groq    (GROQ_API_KEY)
+FastAPI API ──► PostgreSQL ◄── Durable evaluation worker
+                    ▲                 │
+                    │                 ├──► Ollama
+                    │                 └──► Groq
+                    └── job + run + incremental results
 ```
 
-Evaluations currently run sequentially inside one API request (no durable queue/worker). Keep datasets and timeouts within your host's request-duration limit; see [DEPLOYMENT.md](./DEPLOYMENT.md).
+The API now enqueues evaluations and returns immediately. A separately deployed long-running worker claims jobs from PostgreSQL, persists each result, renews its lease, resumes after interruption, and supports retries/cancellation. Vercel still hosts only the frontend/API; it does not run the worker process. See [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ## Tech stack
 
@@ -50,7 +52,8 @@ cp .env.example .env          # set JWT_SECRET_KEY (>= 32 random bytes)
 npm ci
 python -m pip install -r backend/requirements.txt
 python -m alembic -c alembic.ini upgrade head
-python -m uvicorn backend.app.main:app --reload   # backend on :8000
+python -m uvicorn backend.app.main:app --reload   # API on :8000
+python -m backend.app.jobs.evaluation_worker     # worker in a second terminal
 npm run dev                                       # frontend on :5173
 ```
 
@@ -71,6 +74,7 @@ npm run lint
 npm run test:run
 npm run build
 pytest -q backend/tests/
+python -m alembic -c alembic.ini upgrade head
 ```
 
 ## Deployment

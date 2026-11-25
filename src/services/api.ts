@@ -1,5 +1,5 @@
 import { initialDatasets, initialTestCases, modelMetrics } from '../data/mockData'
-import type { Dataset, EvaluationConfig, EvaluationExecution, EvaluationMethod, EvaluationRun, Failure, MockExecutionProgress, Rubric, TestCase } from '../types'
+import type { Dataset, EvaluationConfig, EvaluationExecution, EvaluationJobExecution, EvaluationMethod, EvaluationRun, Failure, MockExecutionProgress, Rubric, TestCase } from '../types'
 
 const importMetaWithEnv = import.meta as ImportMeta & {
   env?: {
@@ -319,11 +319,17 @@ export const api = {
     evaluationMethod: EvaluationMethod
     rubric: string
     temperature: number
-  }): Promise<EvaluationExecution> {
-    return fetchJson<EvaluationExecution>('/evaluate', {
+  }): Promise<EvaluationJobExecution> {
+    return fetchJson<EvaluationJobExecution>('/evaluate/jobs', {
       method: 'POST',
       body: JSON.stringify({ provider: config.provider ?? 'ollama', ...config }),
     })
+  },
+  async getEvaluationJob(jobId: string): Promise<EvaluationJobExecution> {
+    return fetchJson<EvaluationJobExecution>(`/evaluate/jobs/${encodeURIComponent(jobId)}`)
+  },
+  async cancelEvaluationJob(jobId: string): Promise<{ jobId: string; status: string; cancelRequested: boolean }> {
+    return fetchJson(`/evaluate/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' })
   },
   async getRunDetails(runId: string): Promise<EvaluationExecution> {
     return fetchJson<EvaluationExecution>(`/runs/${encodeURIComponent(runId)}`)

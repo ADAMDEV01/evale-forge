@@ -233,7 +233,7 @@ def test_readiness_and_compatibility_checks_attempt_no_ddl(migrated_test_engine,
     assert report.alembic_revision_status == 'known_non_head_revision'
     assert readiness.status == 'exact_match'
     assert ddl_attempts == []
-    assert revisions_after == revisions_before == ('d41e0a6b9c12',)
+    assert revisions_after == revisions_before == ('4b7e2c91a6d0',)
 
 
 def test_check_constraint_comparison_accepts_matching_constraint(migrated_test_engine):

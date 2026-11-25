@@ -1,1 +1,1 @@
-from .models import Dataset, DatasetVersion, EvaluationResult, EvaluationRun, HumanReview, Rubric, RubricCriterion, TestCase
+from .models import Dataset, DatasetVersion, EvaluationJob, EvaluationResult, EvaluationRun, HumanReview, Rubric, RubricCriterion, TestCase
