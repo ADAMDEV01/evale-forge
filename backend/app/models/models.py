@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.db.database import Base
@@ -181,6 +181,11 @@ class EvaluationRun(Base):
 class EvaluationJob(Base):
     __tablename__ = 'evaluation_jobs'
     __table_args__ = (
+        CheckConstraint(
+            "status IN ('Pending', 'Running', 'Completed', 'Failed', 'Cancelled')",
+            name='evaluation_jobs_status',
+        ),
+        CheckConstraint('attempts >= 0', name='evaluation_jobs_attempts_nonnegative'),
         UniqueConstraint('run_id', name='uq_evaluation_jobs_run_id'),
         Index('ix_evaluation_jobs_claim', 'status', 'available_at', 'locked_at'),
         Index('ix_evaluation_jobs_user_created', 'user_id', 'created_at'),
