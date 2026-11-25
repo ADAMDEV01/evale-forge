@@ -67,8 +67,8 @@ class Dataset(Base):
     description: Mapped[str] = mapped_column(Text, default='')
     version: Mapped[str] = mapped_column(String(32), default='v1.0')
     cases: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    modified_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    modified_at: Mapped[datetime] = mapped_column(default=_utcnow, onupdate=_utcnow)
     color: Mapped[Optional[str]] = mapped_column(String(32), default='violet')
 
     test_cases: Mapped[list['TestCase']] = relationship(back_populates='dataset', cascade='all, delete-orphan')
@@ -81,7 +81,7 @@ class DatasetVersion(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     dataset_id: Mapped[str] = mapped_column(ForeignKey('datasets.id'), nullable=False)
     version: Mapped[str] = mapped_column(String(32), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
     case_count: Mapped[int] = mapped_column(Integer, default=0)
 
     dataset: Mapped['Dataset'] = relationship(back_populates='versions')
@@ -121,8 +121,8 @@ class Rubric(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, default='')
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=_utcnow, onupdate=_utcnow)
 
     criteria: Mapped[list['RubricCriterion']] = relationship(back_populates='rubric', cascade='all, delete-orphan')
 
@@ -172,7 +172,7 @@ class EvaluationRun(Base):
     total: Mapped[int] = mapped_column(Integer, default=0)
     date: Mapped[str] = mapped_column(String(80), default='')
     config_json: Mapped[str] = mapped_column(Text, default='{}')
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
     results: Mapped[list['EvaluationResult']] = relationship(back_populates='run', cascade='all, delete-orphan')
 
@@ -210,4 +210,4 @@ class HumanReview(Base):
     reviewer: Mapped[str] = mapped_column(String(200), default='reviewer')
     verdict: Mapped[str] = mapped_column(String(32), default='pass')
     note: Mapped[str] = mapped_column(Text, default='')
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
