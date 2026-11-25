@@ -1101,10 +1101,9 @@ def _execute_evaluation(
 
     def persist_response(generated: GeneratedResponse) -> None:
         nonlocal engine_errors, estimated_cost_total, cost_estimate_complete
-        active_job = require_job_lease()
-        if active_job is not None and active_job.cancel_requested:
-            db.commit()
-            raise EvaluationCancelledError()
+        # A cancellation arriving during provider inference does not discard
+        # that in-flight response. The next prompt boundary observes the flag.
+        require_job_lease()
         sequence, case = next(case_iterator)
 
         try:
