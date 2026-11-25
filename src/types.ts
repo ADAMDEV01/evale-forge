@@ -162,3 +162,13 @@ export interface MockExecutionProgress {
   failed: number
   errors: number
 }
+
+
+export interface EvaluationJobExecution extends EvaluationExecution {
+  jobId: string
+  status: RunStatus
+  attempts: number
+  progress: number
+  pending: number
+  lastError: string | null
+}
