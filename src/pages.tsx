@@ -987,6 +987,8 @@ export function EvaluationWizard({ datasets, cases, rubrics, onStart, onNavigate
   const [completed, setCompleted] = useState(false)
   const [failed, setFailed] = useState(false)
   const [realResult, setRealResult] = useState<EvaluationExecution | null>(null)
+  const [activeJobId, setActiveJobId] = useState<string | null>(null)
+  const [jobStatus, setJobStatus] = useState('Pending')
   const [providerStatus, setProviderStatus] = useState('')
   const [checkingProvider, setCheckingProvider] = useState(false)
   const [error, setError] = useState('')
@@ -1041,7 +1043,7 @@ export function EvaluationWizard({ datasets, cases, rubrics, onStart, onNavigate
         setCompleted(true)
         window.setTimeout(() => onNavigate('/evaluations'), 1600)
       } else {
-        const result = await api.runEvaluation({
+        const queued = await api.runEvaluation({
           datasetId,
           model: ollamaModel.trim(),
           provider,
@@ -1049,25 +1051,57 @@ export function EvaluationWizard({ datasets, cases, rubrics, onStart, onNavigate
           rubric,
           temperature,
         })
+        setActiveJobId(queued.jobId)
+        setJobStatus(queued.status)
+        await onStart([queued.run], 'ollama')
+
+        let result = queued
+        while (result.status === 'Pending' || result.status === 'Running') {
+          setRealResult(result)
+          setExecution({
+            progress: result.progress,
+            pending: result.pending,
+            running: result.status === 'Running' ? 1 : 0,
+            passed: result.run.passed,
+            failed: result.run.failed,
+            errors: result.errors,
+          })
+          setProgress(result.progress)
+          setJobStatus(result.status)
+          await new Promise((resolve) => window.setTimeout(resolve, 1200))
+          result = await api.getEvaluationJob(queued.jobId)
+        }
+
         setRealResult(result)
         setExecution({
-          progress: 100,
-          pending: 0,
+          progress: result.progress,
+          pending: result.pending,
           running: 0,
           passed: result.run.passed,
           failed: result.run.failed,
           errors: result.errors,
         })
-        setProgress(100)
-        setCompleted(result.run.status === 'Completed')
-        setFailed(result.run.status === 'Failed')
+        setProgress(result.progress)
+        setJobStatus(result.status)
+        setCompleted(result.status === 'Completed')
+        setFailed(result.status === 'Failed' || result.status === 'Cancelled')
         await onStart([result.run], 'ollama')
       }
     } catch (startError) {
       setFailed(true)
+      setJobStatus('Failed')
       setExecution((current) => ({ ...current, pending: 0, running: 0 }))
       setError(startError instanceof Error ? startError.message : 'Evaluation failed.')
       if (mode === 'ollama') await onStart([], 'ollama')
+    }
+  }
+  const cancelEvaluation = async () => {
+    if (!activeJobId) return
+    try {
+      await api.cancelEvaluationJob(activeJobId)
+      setJobStatus('Cancelling')
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : 'Could not cancel the evaluation.')
     }
   }
   const checkProvider = async () => {
@@ -1117,8 +1151,9 @@ export function EvaluationWizard({ datasets, cases, rubrics, onStart, onNavigate
         <div className="wizard-demo-warning"><Sparkles size={15} /><span><strong>{mode === 'mock' ? 'Demo execution only' : 'Live provider evaluation'}</strong><small>{mode === 'mock' ? 'Results use existing sample data and never claim a model was called.' : 'This request requires the selected provider and model to be configured. Provider errors are shown; no mock fallback is used.'}</small></span></div>
       </Card>}
       {step === 5 && <Card className="execution-card">
-        <div className="execution-top"><span className={`execution-icon ${completed ? 'execution-complete' : ''}`}>{completed ? <CheckCircle2 size={21} /> : failed ? <CircleAlert size={21} /> : <LoaderCircle className="spin" size={21} />}</span><span><h2>{completed ? 'Evaluation complete' : failed ? 'Evaluation failed' : 'Evaluation in progress'}</h2><p>{mode === 'mock' ? 'Demo / Mock mode · no AI model was called.' : 'Live provider mode · waiting for the real model evaluation response.'}</p></span><Badge tone={completed ? 'green' : failed ? 'red' : 'blue'}>{completed ? 'Completed' : failed ? 'Failed' : 'Running'}</Badge></div>
-        {mode === 'mock' || completed || failed ? <><div className="execution-progress-header"><span>{mode === 'mock' ? 'Demo progress' : 'Evaluation status'}</span><strong>{progress}%</strong></div><div className="execution-progress"><i style={{ width: `${progress}%` }} /></div></> : <div className="execution-log"><strong><span className="log-dot" />Live provider request running</strong><small>Progress is reported when the backend finishes; no simulated progress is shown.</small></div>}
+        <div className="execution-top"><span className={`execution-icon ${completed ? 'execution-complete' : ''}`}>{completed ? <CheckCircle2 size={21} /> : failed ? <CircleAlert size={21} /> : <LoaderCircle className="spin" size={21} />}</span><span><h2>{completed ? 'Evaluation complete' : failed ? 'Evaluation failed' : jobStatus === 'Pending' ? 'Evaluation queued' : 'Evaluation in progress'}</h2><p>{mode === 'mock' ? 'Demo / Mock mode · no AI model was called.' : 'Live provider mode · progress is based on persisted test-case results.'}</p></span><Badge tone={completed ? 'green' : failed ? 'red' : 'blue'}>{completed ? 'Completed' : failed ? jobStatus : jobStatus}</Badge></div>
+        <div className="execution-progress-header"><span>{mode === 'mock' ? 'Demo progress' : 'Persisted evaluation progress'}</span><strong>{progress}%</strong></div><div className="execution-progress"><i style={{ width: `${progress}%` }} /></div>
+        {mode === 'ollama' && activeJobId && !completed && !failed && <div className="wizard-form-footer"><Button onClick={() => void cancelEvaluation()}>Cancel evaluation</Button><small>Job ID: {activeJobId}</small></div>}
         <div className="execution-stats"><div><span className="execution-stat-dot blue-dot-bg" /><small>Pending</small><strong>{execution.pending}</strong></div><div><span className="execution-stat-dot violet-dot-bg" /><small>Running</small><strong>{execution.running}</strong></div><div><span className="execution-stat-dot green-dot-bg" /><small>Passed</small><strong>{execution.passed}</strong></div><div><span className="execution-stat-dot red-dot-bg" /><small>Failed</small><strong>{execution.failed}</strong></div><div><span className="execution-stat-dot amber-dot-bg" /><small>Errors</small><strong>{execution.errors}</strong></div></div>
         {realResult && <div className="run-case-results"><h3>Actual model responses</h3>{realResult.results.map((result) => <div className="response-block actual-block" key={result.id}><div className="response-label"><strong>{result.testCaseTitle}</strong><Badge tone={result.status === 'Error' ? 'yellow' : result.passed ? 'green' : 'red'}>{result.status === 'Error' ? 'Evaluation error' : result.passed ? 'Pass' : 'Fail'}</Badge><span className="result-time">{result.latencyMs} ms</span></div><p><strong>Expected:</strong> {result.expected}</p><p><strong>Model response:</strong> {result.actual}</p>{result.errorMessage && <p role="alert">{result.errorMessage}</p>}</div>)}</div>}
         {mode === 'mock' && <div className="execution-log"><strong><span className={completed ? 'log-dot-complete' : 'log-dot'} />{completed ? 'Demo finished' : 'Demo simulation running'}</strong><small>Sample metrics only. No provider request was made.</small></div>}
