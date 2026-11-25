@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from sqlalchemy import select, update
 
 from backend.app.db import database
+from backend.app.jobs.errors import EvaluationLeaseLostError
 from backend.app.models.models import EvaluationJob, EvaluationRun, User
 from backend.app.schemas.schemas import EvaluationRequest
 
@@ -209,6 +210,7 @@ def process_job(job_id: str, *, worker_id: str) -> None:
                 existing_run_id=job.run_id,
                 case_snapshot=payload['cases'],
                 job_id=job.id,
+                job_lock_owner=worker_id,
             )
             status = result['run']['status']
             if status == 'Cancelled':
@@ -222,6 +224,8 @@ def process_job(job_id: str, *, worker_id: str) -> None:
                 )
             else:
                 _complete_or_retry(job_id, worker_id)
+    except EvaluationLeaseLostError:
+        logger.info('Worker %s lost the lease for evaluation job %s.', worker_id, job_id)
     except HTTPException as error:
         _complete_or_retry(
             job_id,
