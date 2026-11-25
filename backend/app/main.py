@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.db.database import engine, get_db
 from backend.app.db.schema_lifecycle import verify_database_readiness
+from backend.app.jobs.errors import EvaluationLeaseLostError
 from backend.app.models.models import Dataset, EvaluationJob, EvaluationResult, EvaluationRun, HumanReview, Rubric, RubricCriterion, TestCase, User
 from backend.app.routes.auth import router as auth_router
 from backend.app.schemas.schemas import (
@@ -922,6 +923,7 @@ def _execute_evaluation(
     existing_run_id: str | None = None,
     case_snapshot: list[dict[str, Any]] | None = None,
     job_id: str | None = None,
+    job_lock_owner: str | None = None,
 ):
     existing_run = _owned_run(db, user, existing_run_id) if existing_run_id else None
     dataset = _owned_dataset(db, user, payload.datasetId)
@@ -1061,26 +1063,48 @@ def _execute_evaluation(
         for item in existing_results
     ]
     engine_errors = sum(1 for item in existing_results if item.status == 'Error')
-    estimated_cost_total = 0.0
-    cost_estimate_complete = not existing_results
+    estimated_cost_total = float(run.estimated_cost or 0.0)
+    cost_estimate_complete = not existing_results or run.estimated_cost is not None
     case_iterator = iter(pending_cases)
 
     class EvaluationCancelledError(Exception):
         pass
 
+    def require_job_lease() -> EvaluationJob | None:
+        if job_id is None:
+            return None
+        if job_lock_owner is None:
+            raise EvaluationLeaseLostError("The evaluation worker has no lease owner token.")
+        active_job = db.scalar(
+            select(EvaluationJob)
+            .where(
+                EvaluationJob.id == job_id,
+                EvaluationJob.status == 'Running',
+                EvaluationJob.lock_owner == job_lock_owner,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if active_job is None:
+            raise EvaluationLeaseLostError("The evaluation job lease is no longer owned by this worker.")
+        return active_job
+
     def pending_prompts():
         for _sequence, case in pending_cases:
-            if job_id is not None:
-                job = db.get(EvaluationJob, job_id)
-                if job is None:
-                    raise EvaluationCancelledError()
-                db.refresh(job)
-                if job.cancel_requested:
+            active_job = require_job_lease()
+            if active_job is not None:
+                cancelled = active_job.cancel_requested
+                db.commit()
+                if cancelled:
                     raise EvaluationCancelledError()
             yield case.input
 
     def persist_response(generated: GeneratedResponse) -> None:
         nonlocal engine_errors, estimated_cost_total, cost_estimate_complete
+        active_job = require_job_lease()
+        if active_job is not None and active_job.cancel_requested:
+            db.commit()
+            raise EvaluationCancelledError()
         sequence, case = next(case_iterator)
 
         try:
@@ -1213,6 +1237,9 @@ def _execute_evaluation(
     # During a resumed attempt, already-persisted results have no per-case cost
     # column, so their aggregate remains unavailable rather than being guessed.
     summary = calculate_metrics(processed).model_dump()
+    summary['estimatedCost'] = (
+        round(estimated_cost_total, 10) if cost_estimate_complete else None
+    )
     run.accuracy = summary['accuracy']
     run.pass_rate = summary['passRate']
     run.latency = int(summary['averageLatency'])
