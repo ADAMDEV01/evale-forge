@@ -218,3 +218,59 @@ def test_job_lookup_is_scoped_to_the_authenticated_owner(client, isolated_test_d
 
     response = client.get(f"/api/evaluate/jobs/{queued['jobId']}")
     assert response.status_code == 404
+
+
+def test_worker_reclaims_expired_lease_and_increments_attempt_count(client):
+    queued = enqueue(client, cases=1)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    with database.SessionLocal() as db:
+        job = db.get(EvaluationJob, queued['jobId'])
+        assert job is not None
+        job.status = 'Running'
+        job.attempts = 1
+        job.lock_owner = 'dead-worker'
+        job.locked_at = now - timedelta(minutes=6)
+        run = db.get(EvaluationRun, job.run_id)
+        assert run is not None
+        run.status = 'Running'
+        db.commit()
+
+    claimed_id = evaluation_worker.claim_next_job(
+        worker_id='recovery-worker',
+        now=now,
+    )
+
+    assert claimed_id == queued['jobId']
+    with database.SessionLocal() as db:
+        job = db.get(EvaluationJob, queued['jobId'])
+        assert job is not None
+        assert job.status == 'Running'
+        assert job.attempts == 2
+        assert job.lock_owner == 'recovery-worker'
+
+
+def test_expired_job_at_retry_limit_is_failed_instead_of_reclaimed(client):
+    queued = enqueue(client, cases=1)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    with database.SessionLocal() as db:
+        job = db.get(EvaluationJob, queued['jobId'])
+        assert job is not None
+        job.status = 'Running'
+        job.attempts = evaluation_worker.MAX_ATTEMPTS
+        job.lock_owner = 'dead-worker'
+        job.locked_at = now - timedelta(minutes=6)
+        run = db.get(EvaluationRun, job.run_id)
+        assert run is not None
+        run.status = 'Running'
+        db.commit()
+
+    claimed_id = evaluation_worker.claim_next_job(
+        worker_id='recovery-worker',
+        now=now,
+    )
+
+    assert claimed_id is None
+    details = get_job(client, queued['jobId'])
+    assert details['status'] == 'Failed'
+    assert details['run']['status'] == 'Failed'
+    assert details['lastError'] == 'Worker lease expired after the final execution attempt.'
