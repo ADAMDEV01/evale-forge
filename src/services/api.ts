@@ -335,7 +335,7 @@ export const api = {
     modelInstalled: boolean | null
     error: { code: string; message: string } | null
   }> {
-    return fetchJson(`/providers/${provider}/health${model ? `?model=${encodeURIComponent(model)}` : ''}`, {}, { authenticated: false })
+    return fetchJson(`/providers/${provider}/health${model ? `?model=${encodeURIComponent(model)}` : ''}`)
   },
   async simulateEvaluation(
     config: EvaluationConfig,

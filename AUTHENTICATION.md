@@ -15,8 +15,10 @@ Authentication endpoints:
 - `POST /api/auth/logout`
 - `POST /api/auth/logout-all`
 
-`/api/health` and `/api/providers/ollama/health` remain public. Business API
-routes require a verified bearer access token. Dataset, rubric, and evaluation
+`/api/health` remains public for liveness checks. Provider health checks and all
+business API routes require a verified bearer access token. This prevents
+unauthenticated callers from triggering outbound provider requests or consuming
+hosted provider quota. Dataset, rubric, and evaluation
 resources are scoped to their authenticated owner; child cases, results, and
 reviews are authorized through their parent. Unowned legacy records are
 excluded from user access.

@@ -201,7 +201,11 @@ def health() -> dict[str, str]:
 
 
 @app.get('/api/providers/{provider_name}/health')
-def provider_health(provider_name: str, model: str | None = Query(default=None)):
+def provider_health(
+    provider_name: str,
+    user: AuthenticatedUser,
+    model: str | None = Query(default=None),
+):
     try:
         provider = create_provider(provider_name, model)
         try:
@@ -412,7 +416,7 @@ def list_failures(
                 EvaluationRun.rubric_id.is_(None),
                 Rubric.user_id == user.id,
             ),
-            EvaluationRun.provider == 'ollama',
+            EvaluationRun.provider.in_(('ollama', 'groq')),
             EvaluationRun.status.in_(('Completed', 'Failed')),
             or_(
                 and_(

@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event
 from sqlalchemy.orm import Session as OrmSession, sessionmaker
 
+import backend.app.main as main
 from backend.app.main import app
 from backend.app.models.models import Dataset, EvaluationResult, EvaluationRun
 
@@ -285,15 +286,17 @@ def _seed_failure_breakdown_data(
         session.commit()
 
 
+@pytest.mark.parametrize('provider', ['ollama', 'groq'])
 @pytest.mark.parametrize('run_status', ['Completed', 'Failed'])
 def test_failure_breakdown_includes_evaluation_failures_for_eligible_runs(
     client: TestClient,
     isolated_test_database,
     run_status: str,
+    provider: str,
 ):
     _seed_failure_breakdown_data(
         isolated_test_database,
-        {'eligible-run': {'status': run_status, 'provider': 'ollama'}},
+        {'eligible-run': {'status': run_status, 'provider': provider}},
         [{'id': 'eval-failure', 'run_id': 'eligible-run', 'status': 'Completed', 'passed': False}],
     )
 
@@ -303,19 +306,21 @@ def test_failure_breakdown_includes_evaluation_failures_for_eligible_runs(
     failure = response.json()[0]
     assert failure['id'] == 'eval-failure'
     assert failure['run_status'] == run_status
-    assert failure['run_provider'] == 'ollama'
+    assert failure['run_provider'] == provider
     assert failure['failure_type'] == 'evaluation_failure'
 
 
+@pytest.mark.parametrize('provider', ['ollama', 'groq'])
 @pytest.mark.parametrize('run_status', ['Completed', 'Failed'])
 def test_failure_breakdown_includes_evaluation_errors_for_eligible_runs(
     client: TestClient,
     isolated_test_database,
     run_status: str,
+    provider: str,
 ):
     _seed_failure_breakdown_data(
         isolated_test_database,
-        {'eligible-run': {'status': run_status, 'provider': 'ollama'}},
+        {'eligible-run': {'status': run_status, 'provider': provider}},
         [{'id': 'eval-error', 'run_id': 'eligible-run', 'status': 'Error', 'passed': False}],
     )
 
@@ -325,7 +330,7 @@ def test_failure_breakdown_includes_evaluation_errors_for_eligible_runs(
     error = response.json()[0]
     assert error['id'] == 'eval-error'
     assert error['run_status'] == run_status
-    assert error['run_provider'] == 'ollama'
+    assert error['run_provider'] == provider
     assert error['failure_type'] == 'evaluation_error'
 
 
@@ -513,3 +518,34 @@ def test_evaluation_metrics_and_exact_match(client: TestClient):
 def test_invalid_requests_are_rejected(client: TestClient):
     response = client.post('/api/datasets', json={'id': '', 'name': ''})
     assert response.status_code in {200, 422}
+
+
+
+def test_provider_health_check_requires_authentication(unauthenticated_client: TestClient):
+    response = unauthenticated_client.get('/api/providers/ollama/health')
+    assert response.status_code == 401
+
+
+def test_authenticated_provider_health_check_uses_backend_provider(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class StubProvider:
+        model = 'llama3.2'
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(main, 'create_provider', lambda _name, _model: StubProvider())
+    monkeypatch.setattr(main, 'check_model_if_supported', lambda _provider: True)
+
+    response = client.get('/api/providers/ollama/health')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'provider': 'ollama',
+        'available': True,
+        'model': 'llama3.2',
+        'modelInstalled': True,
+        'error': None,
+    }
