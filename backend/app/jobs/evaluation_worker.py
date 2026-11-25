@@ -139,15 +139,17 @@ def _complete_or_retry(
             return
         run = db.get(EvaluationRun, job.run_id)
 
-        if job.cancel_requested:
-            job.status = 'Cancelled'
-            if run is not None:
-                run.status = 'Cancelled'
-        elif error is None:
-            job.status = run.status if run and run.status in {'Completed', 'Failed', 'Cancelled'} else 'Completed'
+        if error is None:
+            job.status = run.status if run and run.status in {'Completed', 'Failed', 'Cancelled'} else (
+                'Cancelled' if job.cancel_requested else 'Completed'
+            )
             if run is not None:
                 run.status = job.status
             job.last_error = None
+        elif job.cancel_requested:
+            job.status = 'Cancelled'
+            if run is not None:
+                run.status = 'Cancelled'
         elif retryable and job.attempts < MAX_ATTEMPTS:
             job.status = 'Pending'
             job.available_at = now + retry_delay(job.attempts)
