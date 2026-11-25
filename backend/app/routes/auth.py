@@ -1,7 +1,7 @@
 import hashlib
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
@@ -92,7 +92,7 @@ def _record_login_attempt(db: Session, key_hash: str) -> None:
     if max_attempts < 1 or window_seconds < 1:
         raise HTTPException(status_code=503, detail='Login rate limiting is misconfigured')
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     cutoff = now - timedelta(seconds=window_seconds)
     insert = postgresql_insert if db.get_bind().dialect.name == 'postgresql' else sqlite_insert
     statement = insert(AuthLoginAttempt).values(
