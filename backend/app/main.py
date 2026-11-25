@@ -4,7 +4,7 @@ import json
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
@@ -279,7 +279,7 @@ def create_dataset(
         dataset.version = payload.version
         dataset.cases = payload.cases
         dataset.color = payload.color
-        dataset.modified_at = datetime.utcnow()
+        dataset.modified_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     return list_datasets(db, user)
 
