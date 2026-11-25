@@ -77,17 +77,9 @@ def test_every_business_route_rejects_anonymous_and_invalid_credentials(
     assert response.status_code == 401
 
 
-def test_health_routes_remain_public(unauthenticated_client, monkeypatch):
-    monkeypatch.setattr(
-        main,
-        'create_provider',
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            main.ProviderError('provider_connection', 'provider unavailable')
-        ),
-    )
-
+def test_liveness_health_is_public_but_provider_health_requires_authentication(unauthenticated_client):
     assert unauthenticated_client.get('/api/health').status_code == 200
-    assert unauthenticated_client.get('/api/providers/ollama/health').status_code == 200
+    assert unauthenticated_client.get('/api/providers/ollama/health').status_code == 401
 
 
 def test_lists_failures_and_aggregates_are_scoped_to_user_and_hide_unowned_rows(
