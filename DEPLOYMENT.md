@@ -20,19 +20,66 @@ Vercel Services are currently documented as beta. Each service follows Vercel
 Function runtime limits. This is a supported deployment shape, but it does not
 make long-running evaluations unlimited or durable.
 
-## Runtime suitability and evaluation limits
+## Runtime suitability and evaluation jobs
 
-The current evaluation endpoint processes test cases sequentially and the
-provider request timeout defaults to 120 seconds. A dataset with several slow
-cases can exceed a serverless request's configured maximum duration. The
-service's `maxDuration` can be configured within the limits of the Vercel
-plan, but increasing it does not provide durable background execution.
+Live evaluations are submitted to a durable PostgreSQL job queue. The API
+validates the request, snapshots the selected test cases and rubric, writes a
+pending run/job, and returns `202 Accepted` without waiting for model inference.
+The browser polls the authenticated job endpoint for persisted result counts,
+status, and errors; cancellation is available while a worker is processing.
 
-For larger or production-critical workloads, move evaluation execution to a
-durable job queue and worker on a long-running container service. That queue
-and worker are not implemented by this repository today. Until then, keep
-datasets and provider timeouts within the actual Vercel duration budget and
-verify the deployed endpoint with representative workloads.
+A dedicated long-running worker claims jobs with PostgreSQL
+`FOR UPDATE SKIP LOCKED`, renews its lease while a model call is running,
+persists each test result as it completes, and resumes only cases that do not
+already have a saved result after a worker restart. Transient provider errors
+receive a bounded retry schedule. The queue, job state, snapshots, and results
+are stored in the shared PostgreSQL database; no Redis or in-memory queue is
+required.
+
+**The worker is not a Vercel Function.** Vercel continues to host the frontend
+and HTTP API, while a separate container service must run the worker process.
+If that service is stopped or not deployed, API requests will remain queued
+until a worker is available. Keep the API and worker on the same production
+database and migration revision.
+
+
+## Deploy the evaluation worker
+
+The worker uses the same `backend/Dockerfile` and repository code as the API,
+but starts a different process:
+
+```bash
+python -m backend.app.jobs.evaluation_worker
+```
+
+For local Docker Compose, `docker compose up --build` starts the API,
+frontend, and dedicated `evaluation-worker` service. For production, create a
+private, always-on Docker/background-worker service from this repository:
+
+- Dockerfile: `backend/Dockerfile`
+- Start command: `python -m backend.app.jobs.evaluation_worker`
+- Do not expose a public HTTP port for the worker.
+- Configure the same `DATABASE_URL` as the API and apply Alembic migrations
+  before starting either new version.
+- Configure `FASTAPI_ENV=production`, `JWT_SECRET_KEY`, and the provider
+  settings needed by queued jobs (`OLLAMA_BASE_URL`, `OLLAMA_MODEL`,
+  `OLLAMA_TIMEOUT_SECONDS`, `GROQ_API_KEY`, `GROQ_MODEL`, and optional
+  Groq cost rates). Keep all secrets in the worker platform's secret store.
+- Set `EVALUATION_WORKER_POLL_SECONDS` to a value from 0.25 to 60 seconds;
+  the default is 2 seconds.
+
+The worker uses a five-minute lease with a 30-second heartbeat and up to three
+attempts. If a process is terminated, another worker can reclaim its expired
+lease. Results already written to PostgreSQL are retained and skipped when the
+job resumes. A provider may have completed an external inference just before a
+worker crash without its response being committed; that individual inference
+can be repeated, so this is durable at-least-once execution rather than
+exactly-once model billing.
+
+Run at least one worker replica. Additional replicas can safely compete for
+jobs because claims are protected by PostgreSQL row locks. Monitor jobs in
+`Pending` for longer than the expected queue delay and jobs marked `Failed`;
+the API exposes each job's last error and attempt count to its owner.
 
 ## Vercel project setup
 
