@@ -1072,7 +1072,10 @@ def _execute_evaluation(
         for _sequence, case in pending_cases:
             if job_id is not None:
                 job = db.get(EvaluationJob, job_id)
-                if job is None or job.cancel_requested:
+                if job is None:
+                    raise EvaluationCancelledError()
+                db.refresh(job)
+                if job.cancel_requested:
                     raise EvaluationCancelledError()
             yield case.input
 
