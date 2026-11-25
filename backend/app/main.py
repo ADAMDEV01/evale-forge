@@ -1363,7 +1363,12 @@ def enqueue_evaluation(
         'status': job.status,
         'attempts': job.attempts,
         'progress': 0,
+        'pending': run.total,
+        'lastError': None,
         'run': _run_schema(run, 0).model_dump(),
+        'results': [],
+        'metrics': calculate_metrics([]).model_dump(),
+        'errors': 0,
     }
 
 
@@ -1404,6 +1409,7 @@ def get_evaluation_job(
         'progress': round((len(results) / run.total) * 100) if run.total else 0,
         'pending': max(0, run.total - len(results)),
         'lastError': job.last_error,
+        'cancelRequested': job.cancel_requested,
         'run': _run_schema(run, len(results)).model_dump(),
         'results': [_result_schema(item).model_dump() for item in results],
         'metrics': metrics,
