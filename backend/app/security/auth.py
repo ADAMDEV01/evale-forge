@@ -5,6 +5,7 @@ import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 from typing import Annotated, Any
 
 import jwt
@@ -58,8 +59,28 @@ def allowed_cors_origins() -> list[str]:
         ','.join(DEFAULT_CORS_ALLOWED_ORIGINS),
     )
     origins = [origin.strip().rstrip('/') for origin in configured.split(',') if origin.strip()]
-    if not origins or '*' in origins:
+    if not origins or any('*' in origin for origin in origins):
         raise RuntimeError('CORS_ALLOWED_ORIGINS must contain explicit origins and cannot include "*".')
+
+    if is_production:
+        for origin in origins:
+            parsed = urlsplit(origin)
+            if (
+                parsed.scheme != 'https'
+                or not parsed.netloc
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+                or origin != f'{parsed.scheme}://{parsed.netloc}'
+                or parsed.hostname in {'localhost'}
+                or parsed.hostname is None
+                or parsed.hostname.endswith('.localhost')
+            ):
+                raise RuntimeError(
+                    'Production CORS_ALLOWED_ORIGINS must be exact public HTTPS origins without paths or wildcards.'
+                )
 
     return origins
 
@@ -88,9 +109,9 @@ def utcnow() -> datetime:
 
 def get_jwt_secret() -> bytes:
     secret = os.environ.get('JWT_SECRET_KEY', '')
-    if len(secret.encode('utf-8')) < 32:
+    if len(secret.encode('utf-8')) < 32 or 'replace' in secret.lower():
         raise AuthenticationConfigurationError(
-            'JWT_SECRET_KEY must be configured with at least 32 bytes.'
+            'JWT_SECRET_KEY must be configured with at least 32 random bytes.'
         )
     return secret.encode('utf-8')
 
