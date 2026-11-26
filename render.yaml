@@ -1,0 +1,41 @@
+services:
+  # Dedicated durable consumer for the PostgreSQL evaluation_jobs queue.
+  # This is intentionally separate from Vercel Functions.
+  - type: worker
+    name: evalforge-evaluation-worker
+    runtime: docker
+    region: ohio
+    plan: 0.5c-512mb
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    dockerCommand: python -m backend.app.jobs.evaluation_worker
+    autoDeployTrigger: off
+    envVars:
+      - key: FASTAPI_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: AUTH_COOKIE_SECURE
+        value: "true"
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: OLLAMA_BASE_URL
+        sync: false
+      - key: OLLAMA_MODEL
+        value: llama3.2
+      - key: OLLAMA_TIMEOUT_SECONDS
+        value: "120"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-20b
+      - key: GROQ_TIMEOUT_SECONDS
+        value: "60"
+      - key: GROQ_INPUT_COST_PER_MILLION
+        sync: false
+      - key: GROQ_OUTPUT_COST_PER_MILLION
+        sync: false
+      - key: EVALUATION_WORKER_POLL_SECONDS
+        value: "2"
