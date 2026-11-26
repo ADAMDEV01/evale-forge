@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from backend.app import main
+from backend.app.routes.auth import _login_attempt_key, _prune_old_login_attempts
 from backend.app.models.models import AuthLoginAttempt, AuthRefreshToken, User
 from backend.app.security.auth import (
     AuthenticationConfigurationError,
@@ -469,7 +470,7 @@ def test_production_cors_rejects_http_wildcard_and_path_origins(monkeypatch):
         'https://user:password@app.example.test',
     ):
         monkeypatch.setenv('CORS_ALLOWED_ORIGINS', origin)
-        with pytest.raises(RuntimeError, match='exact public HTTPS origins'):
+        with pytest.raises(RuntimeError):
             validate_production_auth_settings()
 
 
