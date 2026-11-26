@@ -43,3 +43,13 @@ jobs:
           python-version: '3.12'
       - run: pip install -r backend/requirements-dev.txt
       - run: pytest backend/tests/test_evaluation_regression_gate.py -q
+
+  render-blueprint:
+    name: Render worker blueprint validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate Render worker blueprint
+        run: ruby -ryaml -e 'services = YAML.load_file("render.yaml").fetch("services"); abort "Expected one worker service" unless services.length == 1 && services[0]["type"] == "worker"; abort "Automatic deployments must remain disabled" unless services[0]["autoDeployTrigger"] == "off"; abort "Unexpected worker command" unless services[0]["dockerCommand"] == "python -m backend.app.jobs.evaluation_worker"'
