@@ -509,11 +509,21 @@ def verify_database_readiness(engine: Engine) -> SchemaCompatibilityReport:
                 Column('attempts', Integer(), nullable=False),
                 Column('updated_at', DateTime(), nullable=False),
             )
-            Index(
-                'ix_auth_login_attempts_updated_at',
-                optional_login_attempts.c.updated_at,
-            )
-            migration_revisions = set(_script_directory().get_heads()) | {'ce4d8129ab31'}
+            tracked_revisions = tuple(sorted(
+                connection.execute(text('SELECT version_num FROM alembic_version')).scalars()
+            )) if inspect(connection).has_table('alembic_version') else ()
+            if tracked_revisions == ('e72b3d19a4c8',):
+                Index(
+                    'ix_auth_login_attempts_updated_at',
+                    optional_login_attempts.c.updated_at,
+                )
+
+            # Accept the pre-index queue schema for rolling migrations while
+            # requiring the retention index once the new revision is applied.
+            migration_revisions = set(_script_directory().get_heads()) | {
+                'ce4d8129ab31',
+                '4b7e2c91a6d0',
+            }
             report = _check_schema_against(
                 connection,
                 Base.metadata,
