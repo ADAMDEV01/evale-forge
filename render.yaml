@@ -9,7 +9,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
     dockerCommand: python -m backend.app.jobs.evaluation_worker
-    autoDeployTrigger: off
+    autoDeployTrigger: "off"
     envVars:
       - key: FASTAPI_ENV
         value: production
