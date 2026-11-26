@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Iterable
 
 from alembic.script import ScriptDirectory
-from sqlalchemy import Boolean, Engine, Integer, MetaData, String, Table as SQLTable, UniqueConstraint, create_engine, inspect, text
+from sqlalchemy import Boolean, Engine, Index, Integer, MetaData, String, Table as SQLTable, UniqueConstraint, create_engine, inspect, text
 from sqlalchemy.engine import Connection, URL, make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql.schema import CheckConstraint, Column, Table
@@ -508,6 +508,10 @@ def verify_database_readiness(engine: Engine) -> SchemaCompatibilityReport:
                 Column('window_started_at', DateTime(), nullable=False),
                 Column('attempts', Integer(), nullable=False),
                 Column('updated_at', DateTime(), nullable=False),
+            )
+            Index(
+                'ix_auth_login_attempts_updated_at',
+                optional_login_attempts.c.updated_at,
             )
             migration_revisions = set(_script_directory().get_heads()) | {'ce4d8129ab31'}
             report = _check_schema_against(
