@@ -198,11 +198,15 @@ checks have passed.
 
 ## Remaining production hardening
 
-The current implementation still runs evaluations sequentially inside the
-request lifecycle; it does not yet provide a durable background queue or
-worker. Do not treat FastAPI background tasks or an in-process queue as durable
-on serverless instances. A production queue requires a shared broker and a
-separately deployed worker, plus persisted job state and frontend polling.
+The durable PostgreSQL evaluation queue and dedicated worker described above
+are implemented. The API persists the run, job payload, and test-case snapshot,
+then returns `202 Accepted`; the worker claims jobs with PostgreSQL row locks,
+renews its lease, persists results incrementally, and resumes unfinished cases
+after an interrupted attempt. Production readiness still requires a private,
+always-on worker service running against the same database and migration
+revision as the API. A successful Vercel build does not start the worker or
+prove that queued jobs will be processed. Do not replace the worker with an
+in-process FastAPI background task on serverless instances.
 
 Login rate limiting is database-backed and shared across instances. The
 migration adds hashed email/IP buckets; configure the two LOGIN_RATE_LIMIT
