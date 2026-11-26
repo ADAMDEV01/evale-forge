@@ -5,6 +5,7 @@ import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 from typing import Annotated, Any
 
 import jwt
@@ -58,8 +59,28 @@ def allowed_cors_origins() -> list[str]:
         ','.join(DEFAULT_CORS_ALLOWED_ORIGINS),
     )
     origins = [origin.strip().rstrip('/') for origin in configured.split(',') if origin.strip()]
-    if not origins or '*' in origins:
+    if not origins or any('*' in origin for origin in origins):
         raise RuntimeError('CORS_ALLOWED_ORIGINS must contain explicit origins and cannot include "*".')
+
+    if is_production:
+        for origin in origins:
+            parsed = urlsplit(origin)
+            if (
+                parsed.scheme != 'https'
+                or not parsed.netloc
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+                or origin != f'{parsed.scheme}://{parsed.netloc}'
+                or parsed.hostname in {'localhost'}
+                or parsed.hostname is None
+                or parsed.hostname.endswith('.localhost')
+            ):
+                raise RuntimeError(
+                    'Production CORS_ALLOWED_ORIGINS must be exact public HTTPS origins without paths or wildcards.'
+                )
 
     return origins
 
@@ -88,9 +109,9 @@ def utcnow() -> datetime:
 
 def get_jwt_secret() -> bytes:
     secret = os.environ.get('JWT_SECRET_KEY', '')
-    if len(secret.encode('utf-8')) < 32:
+    if len(secret.encode('utf-8')) < 32 or 'replace' in secret.lower():
         raise AuthenticationConfigurationError(
-            'JWT_SECRET_KEY must be configured with at least 32 bytes.'
+            'JWT_SECRET_KEY must be configured with at least 32 random bytes.'
         )
     return secret.encode('utf-8')
 
@@ -251,18 +272,30 @@ def rotate_refresh_token(db: Session, token: str) -> tuple[User, str]:
 
 
 def revoke_refresh_token(db: Session, token: str) -> None:
+    """Revoke a refresh token atomically, and revoke its family on observed reuse."""
     now = utcnow()
-    current = db.scalar(
-        select(AuthRefreshToken).where(
-            AuthRefreshToken.token_hash == hash_refresh_token(token)
+    token_hash = hash_refresh_token(token)
+    family_id = db.scalar(
+        select(AuthRefreshToken.family_id).where(
+            AuthRefreshToken.token_hash == token_hash
         )
     )
-    if current is None:
+    if family_id is None:
         return
-    if current.revoked_at is not None:
-        _revoke_family(db, current.family_id, now)
-    else:
-        current.revoked_at = now
+
+    result = db.execute(
+        update(AuthRefreshToken)
+        .where(
+            AuthRefreshToken.token_hash == token_hash,
+            AuthRefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        # The token may have been rotated while logout was in flight. Revoke the
+        # replacement too, so a concurrent refresh cannot survive logout.
+        _revoke_family(db, family_id, now)
     db.commit()
 
 

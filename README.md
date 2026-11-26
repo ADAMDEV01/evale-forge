@@ -89,7 +89,7 @@ Other docs: [AUTHENTICATION.md](./AUTHENTICATION.md), [OWNERSHIP.md](./OWNERSHIP
 - **Backend:** Python, FastAPI, REST APIs, provider abstraction, and persistent evaluation workflows.
 - **Data:** PostgreSQL, SQLAlchemy, Alembic migrations, datasets, test cases, rubrics, and evaluation records.
 - **AI evaluation:** Ollama, Groq, Exact Match, Keyword Match, rubric scoring, repeatable test runs, and result analysis.
-- **Security:** JWT authentication, Argon2id password hashing, rotating refresh tokens, and per-user data isolation.
+- **Security:** JWT authentication with fail-fast production secret/origin validation, Argon2id password hashing, atomic refresh-token rotation and family revocation, PostgreSQL-backed login throttling with bounded retention, and per-user data isolation.
 - **Quality & delivery:** pytest, Vitest, Docker Compose, GitHub Actions CI, and Vercel configuration.
 
 ## Repository

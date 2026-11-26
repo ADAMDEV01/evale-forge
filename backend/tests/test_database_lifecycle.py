@@ -81,6 +81,28 @@ def test_application_startup_distinguishes_database_connection_failure(monkeypat
             pass
 
 
+def test_readiness_accepts_pre_retention_index_schema_during_rolling_migration(
+    pre_retention_index_test_engine,
+):
+    report = verify_database_readiness(pre_retention_index_test_engine)
+    indexes = inspect(pre_retention_index_test_engine).get_indexes('auth_login_attempts')
+
+    assert report.status == 'exact_match'
+    assert report.alembic_revision_status == 'current'
+    assert report.alembic_revisions == ('4b7e2c91a6d0',)
+    assert 'ix_auth_login_attempts_updated_at' not in {index['name'] for index in indexes}
+
+
+def test_readiness_requires_retention_index_after_its_migration(migrated_test_engine):
+    report = verify_database_readiness(migrated_test_engine)
+    indexes = inspect(migrated_test_engine).get_indexes('auth_login_attempts')
+
+    assert report.status == 'exact_match'
+    assert report.alembic_revision_status == 'current'
+    assert report.alembic_revisions == ('e72b3d19a4c8',)
+    assert 'ix_auth_login_attempts_updated_at' in {index['name'] for index in indexes}
+
+
 def test_readiness_succeeds_for_migrated_disposable_database(migrated_test_engine):
     report = verify_database_readiness(migrated_test_engine)
 
@@ -233,7 +255,7 @@ def test_readiness_and_compatibility_checks_attempt_no_ddl(migrated_test_engine,
     assert report.alembic_revision_status == 'known_non_head_revision'
     assert readiness.status == 'exact_match'
     assert ddl_attempts == []
-    assert revisions_after == revisions_before == ('4b7e2c91a6d0',)
+    assert revisions_after == revisions_before == ('e72b3d19a4c8',)
 
 
 def test_check_constraint_comparison_accepts_matching_constraint(migrated_test_engine):
