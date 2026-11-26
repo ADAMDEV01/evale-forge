@@ -47,6 +47,25 @@ def migrated_test_engine(migrated_test_database_url: URL):
 
 
 @pytest.fixture
+def pre_retention_index_test_engine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    database_path = (tmp_path / 'pre-retention-index-test.db').resolve()
+    if (
+        database_path.parent != tmp_path.resolve()
+        or database_path == (PROJECT_ROOT / 'evalforge.db').resolve()
+    ):
+        raise AssertionError('Test database must never target the application database.')
+
+    database_url = URL.create('sqlite', database=str(database_path))
+    monkeypatch.setenv('ALEMBIC_DATABASE_URL', database_url.render_as_string(hide_password=True))
+    command.upgrade(Config(str(PROJECT_ROOT / 'alembic.ini')), '4b7e2c91a6d0')
+    test_engine = database._create_engine(database_url)
+    try:
+        yield test_engine
+    finally:
+        test_engine.dispose()
+
+
+@pytest.fixture
 def initial_migration_test_engine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     database_path = (tmp_path / 'initial-migration-test.db').resolve()
     if (
