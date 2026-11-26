@@ -272,18 +272,30 @@ def rotate_refresh_token(db: Session, token: str) -> tuple[User, str]:
 
 
 def revoke_refresh_token(db: Session, token: str) -> None:
+    """Revoke a refresh token atomically, and revoke its family on observed reuse."""
     now = utcnow()
-    current = db.scalar(
-        select(AuthRefreshToken).where(
-            AuthRefreshToken.token_hash == hash_refresh_token(token)
+    token_hash = hash_refresh_token(token)
+    family_id = db.scalar(
+        select(AuthRefreshToken.family_id).where(
+            AuthRefreshToken.token_hash == token_hash
         )
     )
-    if current is None:
+    if family_id is None:
         return
-    if current.revoked_at is not None:
-        _revoke_family(db, current.family_id, now)
-    else:
-        current.revoked_at = now
+
+    result = db.execute(
+        update(AuthRefreshToken)
+        .where(
+            AuthRefreshToken.token_hash == token_hash,
+            AuthRefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    if result.rowcount != 1:
+        # The token may have been rotated while logout was in flight. Revoke the
+        # replacement too, so a concurrent refresh cannot survive logout.
+        _revoke_family(db, family_id, now)
     db.commit()
 
 
