@@ -242,3 +242,19 @@ instructions. Local SQLite and a manually started Ollama process are
 development conveniences, not production services. The root Docker Compose
 configuration is for local development and is not a complete production
 stack with managed PostgreSQL, private Ollama networking, backups, and TLS.
+
+## Dedicated Render worker blueprint
+
+This repository also includes a root-level `render.yaml` for the long-running evaluation worker. It creates a background worker in the Ohio region, matching the current Neon project region, and starts:
+
+```bash
+python -m backend.app.jobs.evaluation_worker
+```
+
+The Blueprint deliberately sets `autoDeployTrigger: off`; connecting or updating the Blueprint does not automatically deploy new worker code. The worker is not a Vercel Function and must use the exact same production `DATABASE_URL` as the API. Set the same `JWT_SECRET_KEY`, exact public `CORS_ALLOWED_ORIGINS`, and provider configuration as the API. Re-enter secret values in Render's secret fields; they are not copied from Vercel automatically.
+
+For production model calls, use a provider endpoint reachable from Render. A local Ollama process on a developer's computer or `localhost` is not reachable by a hosted worker. Set `OLLAMA_BASE_URL` only when a secured remote Ollama service is available, or configure the same Groq API key/model used by the API. Keep API keys in Render's secret store.
+
+The current Render price list shows the `0.5c-512mb` worker plan at approximately USD $7/month. This is an additional recurring cost, before taxes or usage changes. Do not create or start the service until that cost and the provider settings are approved. Once provisioned, deploy the worker manually, verify its startup logs, and submit one small queued evaluation; it should move from Pending to Completed and persist results in the shared PostgreSQL database.
+
+The Vercel project remains configured to skip builds until deployment is explicitly authorized. Enabling this worker does not require a Vercel deployment, but the API must already have the durable-job code and matching database migration.
