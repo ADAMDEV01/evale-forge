@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
-from sqlalchemy import case, delete, select
+from sqlalchemy import case, delete, select, text
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
@@ -76,11 +76,47 @@ def _check_cookie_request_origin(request: Request) -> None:
 
 
 def _login_attempt_key(request: Request, email: str) -> str:
-    forwarded_for = request.headers.get('x-forwarded-for', '')
+    # Vercel overwrites X-Forwarded-For with the public client IP at its edge.
+    # Outside Vercel, an internet client can spoof this header, so use the ASGI
+    # peer address unless the hosting platform itself is the trusted proxy.
+    forwarded_for = request.headers.get('x-forwarded-for', '') if os.getenv('VERCEL') == '1' else ''
     client_ip = forwarded_for.split(',')[0].strip() if forwarded_for else (
         request.client.host if request.client is not None else 'unknown'
     )
     return hashlib.sha256(f'{client_ip}:{email}'.encode('utf-8')).hexdigest()
+
+
+LOGIN_ATTEMPT_RETENTION = timedelta(days=7)
+LOGIN_ATTEMPT_CLEANUP_BATCH_SIZE = 200
+LOGIN_ATTEMPT_CLEANUP_LOCK_ID = 6_911_804_213
+
+
+def _prune_old_login_attempts(db: Session, now: datetime) -> None:
+    """Prune a bounded batch of expired rate-limit buckets without racing live updates."""
+    if db.get_bind().dialect.name == 'postgresql':
+        acquired = db.scalar(
+            text('SELECT pg_try_advisory_xact_lock(:lock_id)'),
+            {'lock_id': LOGIN_ATTEMPT_CLEANUP_LOCK_ID},
+        )
+        if not acquired:
+            return
+
+    cutoff = now - LOGIN_ATTEMPT_RETENTION
+    expired_keys = db.scalars(
+        select(AuthLoginAttempt.key_hash)
+        .where(AuthLoginAttempt.updated_at < cutoff)
+        .order_by(AuthLoginAttempt.updated_at, AuthLoginAttempt.key_hash)
+        .limit(LOGIN_ATTEMPT_CLEANUP_BATCH_SIZE)
+    ).all()
+    if expired_keys:
+        # Repeat the expiry predicate in DELETE. If an upsert refreshed a row
+        # after the SELECT, that fresh bucket must not be deleted.
+        db.execute(
+            delete(AuthLoginAttempt).where(
+                AuthLoginAttempt.key_hash.in_(expired_keys),
+                AuthLoginAttempt.updated_at < cutoff,
+            )
+        )
 
 
 def _record_login_attempt(db: Session, key_hash: str) -> None:
@@ -116,6 +152,7 @@ def _record_login_attempt(db: Session, key_hash: str) -> None:
         },
     )
     db.execute(statement)
+    _prune_old_login_attempts(db, now)
     db.commit()
 
     bucket = db.get(AuthLoginAttempt, key_hash)
