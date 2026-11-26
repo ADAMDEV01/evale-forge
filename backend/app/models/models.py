@@ -47,6 +47,9 @@ class AuthRefreshToken(Base):
 
 class AuthLoginAttempt(Base):
     __tablename__ = 'auth_login_attempts'
+    __table_args__ = (
+        Index('ix_auth_login_attempts_updated_at', 'updated_at'),
+    )
 
     key_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     window_started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
