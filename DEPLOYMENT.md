@@ -208,10 +208,26 @@ revision as the API. A successful Vercel build does not start the worker or
 prove that queued jobs will be processed. Do not replace the worker with an
 in-process FastAPI background task on serverless instances.
 
-Login rate limiting is database-backed and shared across instances. The
-migration adds hashed email/IP buckets; configure the two LOGIN_RATE_LIMIT
-variables to tune the policy. It currently limits login attempts, not signup
-or other authenticated endpoints.
+Login rate limiting is database-backed and shared across instances. Each
+bucket key is a one-way hash of the normalized email and client IP; raw email/IP
+pairs are not persisted in the rate-limit table. Expired buckets older than
+7 days are pruned in batches of at most 200 per login attempt. PostgreSQL uses a
+transaction-scoped advisory lock to coordinate cleanup, and the DELETE repeats
+the expiry predicate so a bucket refreshed concurrently is never removed.
+
+On Vercel, the login throttle uses the public client address from
+X-Forwarded-For because Vercel overwrites that header at its edge. Outside
+Vercel, the application ignores client-supplied X-Forwarded-For and uses the
+ASGI peer address; do not set VERCEL=1 on a host that does not provide the same
+trusted proxy behavior. The limiter currently protects login attempts, not
+signup or every authenticated endpoint.
+
+Production authentication fails closed unless JWT_SECRET_KEY is at least
+32 random bytes and is not a placeholder, AUTH_COOKIE_SECURE=true, and
+CORS_ALLOWED_ORIGINS contains exact public HTTPS origins without wildcards,
+paths, query strings, or credentials. Logout uses a conditional token update;
+if a token was rotated while logout was in flight, its entire refresh-token
+family is revoked so the replacement cannot survive.
 
 The CI evaluation regression gate checks deterministic evaluator behavior
 against fixed fixtures. It does not call Groq or Ollama and therefore does not
