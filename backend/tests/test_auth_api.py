@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from backend.app import main
-from backend.app.models.models import AuthRefreshToken, User
+from backend.app.models.models import AuthLoginAttempt, AuthRefreshToken, User
 from backend.app.security.auth import (
     AuthenticationConfigurationError,
     JWT_AUDIENCE,
@@ -358,3 +358,125 @@ def test_cors_does_not_add_hardcoded_origin(monkeypatch):
     monkeypatch.setenv('FASTAPI_ENV', 'production')
     monkeypatch.setenv('CORS_ALLOWED_ORIGINS', 'https://example.test/')
     assert allowed_cors_origins() == ['https://example.test']
+
+def test_login_attempt_cleanup_is_bounded_and_keeps_recent_buckets(isolated_test_database):
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    stale = [
+        AuthLoginAttempt(
+            key_hash=f'{index:064x}',
+            window_started_at=now - timedelta(days=8),
+            attempts=1,
+            updated_at=now - timedelta(days=8),
+        )
+        for index in range(205)
+    ]
+    recent = AuthLoginAttempt(
+        key_hash='f' * 64,
+        window_started_at=now,
+        attempts=1,
+        updated_at=now,
+    )
+    factory = sessionmaker(bind=isolated_test_database['engine'])
+    with factory() as db:
+        db.add_all([*stale, recent])
+        db.commit()
+        _prune_old_login_attempts(db, now)
+        db.commit()
+        remaining = db.scalars(select(AuthLoginAttempt)).all()
+
+    assert len(remaining) == 6
+    assert sum(item.updated_at < now - timedelta(days=7) for item in remaining) == 5
+    assert any(item.key_hash == 'f' * 64 for item in remaining)
+
+
+def test_login_ip_key_ignores_untrusted_forwarded_header_outside_vercel(monkeypatch):
+    from starlette.requests import Request
+
+    request = Request({
+        'type': 'http',
+        'method': 'POST',
+        'path': '/api/auth/login',
+        'headers': [(b'x-forwarded-for', b'198.51.100.77')],
+        'client': ('127.0.0.1', 12345),
+        'server': ('testserver', 80),
+        'scheme': 'http',
+        'query_string': b'',
+    })
+    monkeypatch.delenv('VERCEL', raising=False)
+
+    key = _login_attempt_key(request, 'person@example.test')
+    import hashlib
+    expected = hashlib.sha256(b'127.0.0.1:person@example.test').hexdigest()
+
+    assert key == expected
+
+
+def test_login_ip_key_uses_vercel_edge_client_header_when_running_on_vercel(monkeypatch):
+    from starlette.requests import Request
+
+    request = Request({
+        'type': 'http',
+        'method': 'POST',
+        'path': '/api/auth/login',
+        'headers': [(b'x-forwarded-for', b'198.51.100.77')],
+        'client': ('127.0.0.1', 12345),
+        'server': ('testserver', 80),
+        'scheme': 'https',
+        'query_string': b'',
+    })
+    monkeypatch.setenv('VERCEL', '1')
+
+    key = _login_attempt_key(request, 'person@example.test')
+    import hashlib
+    expected = hashlib.sha256(b'198.51.100.77:person@example.test').hexdigest()
+
+    assert key == expected
+
+
+def test_logout_of_a_rotated_refresh_token_revokes_the_replacement_family(unauthenticated_client: TestClient):
+    registered = register_user(unauthenticated_client)
+    original_refresh = registered.cookies.get(REFRESH_COOKIE_NAME)
+    rotated = unauthenticated_client.post('/api/auth/refresh')
+    replacement_refresh = rotated.cookies.get(REFRESH_COOKIE_NAME)
+
+    assert rotated.status_code == 200
+    assert replacement_refresh and replacement_refresh != original_refresh
+
+    logout = unauthenticated_client.post(
+        '/api/auth/logout',
+        headers={'Cookie': f'{REFRESH_COOKIE_NAME}={original_refresh}'},
+    )
+    replacement_replay = unauthenticated_client.post(
+        '/api/auth/refresh',
+        headers={'Cookie': f'{REFRESH_COOKIE_NAME}={replacement_refresh}'},
+    )
+
+    assert logout.status_code == 204
+    assert replacement_replay.status_code == 401
+
+
+def test_production_cors_rejects_http_wildcard_and_path_origins(monkeypatch):
+    from backend.app.security.auth import validate_production_auth_settings
+
+    monkeypatch.setenv('FASTAPI_ENV', 'production')
+    monkeypatch.setenv('JWT_SECRET_KEY', 'x' * 32)
+    monkeypatch.setenv('AUTH_COOKIE_SECURE', 'true')
+
+    for origin in (
+        'http://app.example.test',
+        'https://*.example.test',
+        'https://app.example.test/api',
+        'https://user:password@app.example.test',
+    ):
+        monkeypatch.setenv('CORS_ALLOWED_ORIGINS', origin)
+        with pytest.raises(RuntimeError, match='exact public HTTPS origins'):
+            validate_production_auth_settings()
+
+
+def test_production_rejects_placeholder_jwt_secret(monkeypatch):
+    from backend.app.security.auth import get_jwt_secret
+
+    monkeypatch.setenv('JWT_SECRET_KEY', 'replace-this-with-a-random-secret-value-123456')
+    with pytest.raises(AuthenticationConfigurationError, match='32 random bytes'):
+        get_jwt_secret()
+
