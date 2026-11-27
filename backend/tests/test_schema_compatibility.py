@@ -1,6 +1,22 @@
 from sqlalchemy import text
 
-from backend.app.db.schema_lifecycle import check_schema_compatibility
+from backend.app.db.schema_lifecycle import _normalize_check_expression, check_schema_compatibility
+
+
+
+def test_postgres_any_array_check_matches_in_expression():
+    postgres_expression = (
+        "((status)::text = ANY ((ARRAY["
+        "'Pending'::character varying, 'Running'::character varying, "
+        "'Completed'::character varying, 'Failed'::character varying, "
+        "'Cancelled'::character varying"
+        "])::text[]))"
+    )
+    expected_expression = (
+        "status IN ('Pending', 'Running', 'Completed', 'Failed', 'Cancelled')"
+    )
+
+    assert _normalize_check_expression(postgres_expression) == expected_expression
 
 
 def _replace_human_reviews(
