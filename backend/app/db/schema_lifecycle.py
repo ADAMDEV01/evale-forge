@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -153,8 +154,39 @@ def _normalize_check_expression(expression: str) -> str:
         if not wraps_all or depth != 0:
             break
         normalized = normalized[1:-1].strip()
-    return normalized
 
+    # PostgreSQL renders CHECK (status IN (...)) with implicit casts as
+    # status::text = ANY (ARRAY[... ]::text[]). Normalize that equivalent
+    # catalog representation to the original IN expression.
+    any_match = re.search(
+        r"(?P<left>\(?[A-Za-z_][A-Za-z0-9_.]*\)?(?:\s*::\s*text)?)\s*=\s*ANY\s*\(",
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if any_match:
+        array_start = normalized.find('ARRAY[', any_match.end())
+        if array_start >= 0:
+            values_start = array_start + len('ARRAY[')
+            values_end = normalized.find(']', values_start)
+            if values_end >= 0:
+                suffix = normalized[values_end + 1:]
+                suffix = re.sub(r'::\s*text\s*\[\s*\]', '', suffix, flags=re.IGNORECASE)
+                if not suffix.strip().strip('() \t\r\n'):
+                    left = re.sub(
+                        r'::\s*text\b',
+                        '',
+                        any_match.group('left'),
+                        flags=re.IGNORECASE,
+                    ).strip(' ()')
+                    values = re.sub(
+                        r'::\s*(?:character varying|varchar|text)\b',
+                        '',
+                        normalized[values_start:values_end],
+                        flags=re.IGNORECASE,
+                    )
+                    normalized = f'{left} IN ({values})'
+
+    return normalized
 
 def _quoted_sql_end(sql: str, start: int) -> int | None:
     opening = sql[start]
