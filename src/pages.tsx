@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useSearchParams } from 'react-router-dom'
 import {
-  ArrowDownRight, ArrowRight, ArrowUpRight, Check, CheckCheck, CheckCircle2, Database,
+  Activity, ArrowDownRight, ArrowRight, Check, CheckCheck, CheckCircle2, Database,
   ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Clock3, Copy, Download, Ellipsis,
   FileDown, FileSpreadsheet, Filter, Flag, FlaskConical, Gauge,
   GitCompareArrows, Info, Layers3, LoaderCircle, MoreHorizontal, Plus, Search, ShieldCheck,
