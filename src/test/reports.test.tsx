@@ -103,6 +103,44 @@ const createFailure = (
   ...runContext,
 })
 
+describe('Dashboard empty states', () => {
+  it('shows onboarding actions and neutral KPI details when no runs exist', () => {
+    render(
+      <MemoryRouter>
+        <DashboardPage datasets={[]} cases={[]} runs={[]} failures={[]} onNavigate={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('0 failed · 0 live tests')).toBeInTheDocument()
+    expect(screen.getByText('0 datasets')).toBeInTheDocument()
+    expect(screen.getByText('No completed Live runs yet')).toBeInTheDocument()
+    expect(screen.getByText('No evaluation runs yet')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Run your first evaluation' })).toHaveLength(2)
+    expect(screen.queryByTestId('area-chart')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('bar-chart')).not.toBeInTheDocument()
+  })
+
+  it('uses singular grammar when one dataset exists', () => {
+    const dataset: Dataset = {
+      id: 'one-dataset',
+      name: 'Support',
+      description: 'Support dataset',
+      version: 'v1',
+      cases: 0,
+      createdAt: '2026-01-01',
+      modifiedAt: '2026-01-01',
+      color: 'violet',
+    }
+    render(
+      <MemoryRouter>
+        <DashboardPage datasets={[dataset]} cases={[]} runs={[]} failures={[]} onNavigate={vi.fn()} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('1 dataset')).toBeInTheDocument()
+    expect(screen.queryByText('1 datasets')).not.toBeInTheDocument()
+  })
+})
+
 describe('Reports page', () => {
   it('uses completed runs and actual failure categories for its summaries', () => {
     render(

@@ -28,10 +28,13 @@ function runTypeLabel(run: EvaluationRun) {
   return isLiveRun(run) ? `Live / ${run.provider === 'groq' ? 'Groq' : 'Ollama'}` : 'Demo / Mock'
 }
 
-function StatCard({ label, value, change, changeLabel, icon: Icon, tone, footnote }: { label: string; value: string; change: string; changeLabel: string; icon: typeof Gauge; tone: string; footnote: string }) {
-  return <Card className="stat-card"><div className="stat-head"><span>{label}</span><span className={`stat-icon ${tone}`}><Icon size={16} /></span></div><div className="stat-value">{value}</div><div className="stat-foot"><span className="change-positive"><ArrowUpRight size={13} />{change}</span><span>{changeLabel}</span><span className="stat-period">{footnote}</span></div></Card>
+function StatCard({ label, value, detail, icon: Icon, tone }: { label: string; value: string; detail: string; icon: typeof Gauge; tone: string }) {
+  return <Card className="stat-card">
+    <div className="stat-head"><span>{label}</span><span className={`stat-icon ${tone}`}><Icon size={16} /></span></div>
+    <div className="stat-value">{value}</div>
+    <div className="stat-foot"><span className="stat-detail-dot" aria-hidden="true" /><span>{detail}</span></div>
+  </Card>
 }
-
 export function DashboardPage({ datasets, cases, runs, failures, onNavigate }: { datasets: Dataset[]; cases: TestCase[]; runs: EvaluationRun[]; failures: Failure[]; onNavigate: Navigate }) {
   const liveRuns = runs.filter(isLiveRun)
   const demoRuns = runs.filter((run) => !isLiveRun(run))
@@ -67,17 +70,59 @@ export function DashboardPage({ datasets, cases, runs, failures, onNavigate }: {
   const currentHour = new Date().getHours()
   const greeting = currentHour < 12 ? 'Good morning' : currentHour < 18 ? 'Good afternoon' : 'Good evening'
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()
-  return <div className="page">
+  return <div className="page dashboard-page">
     <PageHeader eyebrow={today} title={greeting} description="Here’s what’s happening across your AI evaluations." actions={<><Button onClick={() => onNavigate('/datasets')}><Plus size={15} /> New dataset</Button><Button variant="primary" onClick={() => onNavigate('/evaluations/new')}><FlaskConical size={15} /> Run evaluation</Button></>} />
     <div className="stats-grid">
-      <StatCard label="Evaluation runs" value={runs.length.toLocaleString()} change={`${liveRuns.length} Live · ${demoRuns.length} Demo`} changeLabel="all run types" footnote={`${datasets.length} datasets`} icon={FlaskConical} tone="violet-icon" />
-      <StatCard label="Average accuracy" value={avgAccuracy === '—' ? '—' : `${avgAccuracy}%`} change={`${completed.length} runs`} changeLabel="Live provider" footnote="Live runs only" icon={Target} tone="blue-icon" />
-      <StatCard label="Average latency" value={avgLatency === null ? '—' : `${avgLatency} ms`} change={`${completed.length} runs`} changeLabel="Live provider" footnote="Live runs only" icon={Timer} tone="green-icon" />
-      <StatCard label="Failure rate" value={failureRate === '—' ? '—' : `${failureRate}%`} change={`${failedCases} failed tests`} changeLabel="Live provider completed runs" footnote={`${totalCases.toLocaleString()} live tests evaluated`} icon={ShieldCheck} tone="amber-icon" />
+      <StatCard label="Evaluation runs" value={runs.length.toLocaleString()} detail={`${liveRuns.length} Live · ${demoRuns.length} Demo · ${datasets.length === 1 ? '1 dataset' : `${datasets.length} datasets`}`} icon={FlaskConical} tone="violet-icon" />
+      <StatCard label="Average accuracy" value={avgAccuracy === '—' ? '—' : `${avgAccuracy}%`} detail={`${completed.length} completed Live runs`} icon={Target} tone="blue-icon" />
+      <StatCard label="Average latency" value={avgLatency === null ? '—' : `${avgLatency} ms`} detail={`${completed.length} completed Live runs`} icon={Timer} tone="green-icon" />
+      <StatCard label="Failure rate" value={failureRate === '—' ? '—' : `${failureRate}%`} detail={`${failedCases.toLocaleString()} failed · ${totalCases.toLocaleString()} live ${totalCases === 1 ? 'test' : 'tests'}`} icon={ShieldCheck} tone="amber-icon" />
     </div>
     <div className="dashboard-charts">
-      <Card className="chart-card accuracy-chart"><div className="card-heading"><div><h2>Live accuracy over time</h2><p>Completed Live provider evaluation runs only</p></div></div><div className="chart-legend"><span><i className="legend-dot violet-dot" />Live provider</span></div><div className="chart-wrap chart-lg"><ResponsiveContainer width="100%" height="100%"><AreaChart data={accuracySeries} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}><defs><linearGradient id="accuracyFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#9b87f5" stopOpacity={0.17} /><stop offset="100%" stopColor="#9b87f5" stopOpacity={0} /></linearGradient></defs><CartesianGrid stroke="#20232c" vertical={false} /><XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: '#7c8393', fontSize: 11 }} dy={10} /><YAxis domain={[0, 100]} tickLine={false} axisLine={false} tick={{ fill: '#7c8393', fontSize: 11 }} tickFormatter={(value) => `${value}%`} /><Tooltip contentStyle={{ background: '#171a22', border: '1px solid #2a2e39', borderRadius: 8, color: '#e5e7eb', fontSize: 12 }} /><Area type="monotone" dataKey="accuracy" name="Live provider accuracy" stroke="#a78bfa" strokeWidth={2} fill="url(#accuracyFill)" /></AreaChart></ResponsiveContainer></div></Card>
-      <Card className="chart-card runs-chart"><div className="card-heading"><div><h2>Run volume</h2><p>Live and Demo runs grouped by run date</p></div><span className="chart-total"><strong>{runs.length}</strong><small>total runs</small></span></div><div className="chart-legend"><span><i className="legend-dot violet-dot" />Live provider</span><span><i className="legend-dot" />Demo / Mock</span></div><div className="chart-wrap chart-lg"><ResponsiveContainer width="100%" height="100%"><BarChart data={volumeSeries} margin={{ top: 14, right: 0, left: -26, bottom: 0 }}><CartesianGrid stroke="#20232c" vertical={false} /><XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: '#7c8393', fontSize: 10 }} dy={10} /><YAxis tickLine={false} axisLine={false} tick={{ fill: '#7c8393', fontSize: 10 }} /><Tooltip cursor={{ fill: '#262a34' }} contentStyle={{ background: '#171a22', border: '1px solid #2a2e39', borderRadius: 8, color: '#e5e7eb', fontSize: 12 }} /><Bar dataKey="liveRuns" name="Live provider" stackId="runs" fill="#806cf0" radius={[4, 4, 0, 0]} barSize={20} /><Bar dataKey="demoRuns" name="Demo / Mock" stackId="runs" fill="#687386" radius={[4, 4, 0, 0]} barSize={20} /></BarChart></ResponsiveContainer></div><div className="chart-summary"><span>{liveRuns.length} Live provider</span><span>{demoRuns.length} Demo / Mock</span></div></Card>
+      <Card className="chart-card accuracy-chart">
+        <div className="card-heading"><div><h2>Live accuracy over time</h2><p>Completed Live provider evaluation runs only</p></div></div>
+        {accuracySeries.length ? <>
+          <div className="chart-legend"><span><i className="legend-dot violet-dot" />Live provider</span></div>
+          <div className="chart-wrap chart-lg"><ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={accuracySeries} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
+              <defs><linearGradient id="accuracyFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#9b87f5" stopOpacity={0.17} /><stop offset="100%" stopColor="#9b87f5" stopOpacity={0} /></linearGradient></defs>
+              <CartesianGrid stroke="#20232c" vertical={false} />
+              <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: '#9da6b5', fontSize: 11 }} dy={10} />
+              <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tick={{ fill: '#9da6b5', fontSize: 11 }} tickFormatter={(value) => `${value}%`} />
+              <Tooltip contentStyle={{ background: '#171a22', border: '1px solid #2a2e39', borderRadius: 8, color: '#e5e7eb', fontSize: 12 }} />
+              <Area type="monotone" dataKey="accuracy" name="Live provider accuracy" stroke="#a78bfa" strokeWidth={2} fill="url(#accuracyFill)" />
+            </AreaChart>
+          </ResponsiveContainer></div>
+        </> : <div className="chart-empty-state" role="status" aria-label="Live accuracy empty state">
+          <span className="chart-empty-icon"><Activity size={19} /></span>
+          <strong>No completed Live runs yet</strong>
+          <p>Run your first evaluation to see accuracy trends here.</p>
+          <Button variant="primary" size="sm" onClick={() => onNavigate('/evaluations/new')}><FlaskConical size={14} /> Run your first evaluation</Button>
+        </div>}
+      </Card>
+
+      <Card className="chart-card runs-chart">
+        <div className="card-heading"><div><h2>Run volume</h2><p>Live and Demo runs grouped by run date</p></div><span className="chart-total"><strong>{runs.length.toLocaleString()}</strong><small>total runs</small></span></div>
+        {volumeSeries.length ? <>
+          <div className="chart-legend"><span><i className="legend-dot violet-dot" />Live provider</span><span><i className="legend-dot" />Demo / Mock</span></div>
+          <div className="chart-wrap chart-lg"><ResponsiveContainer width="100%" height="100%">
+            <BarChart data={volumeSeries} margin={{ top: 14, right: 0, left: -26, bottom: 0 }}>
+              <CartesianGrid stroke="#20232c" vertical={false} />
+              <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: '#9da6b5', fontSize: 10 }} dy={10} />
+              <YAxis tickLine={false} axisLine={false} tick={{ fill: '#9da6b5', fontSize: 10 }} />
+              <Tooltip cursor={{ fill: '#262a34' }} contentStyle={{ background: '#171a22', border: '1px solid #2a2e39', borderRadius: 8, color: '#e5e7eb', fontSize: 12 }} />
+              <Bar dataKey="liveRuns" name="Live provider" stackId="runs" fill="#806cf0" radius={[4, 4, 0, 0]} barSize={20} />
+              <Bar dataKey="demoRuns" name="Demo / Mock" stackId="runs" fill="#687386" radius={[4, 4, 0, 0]} barSize={20} />
+            </BarChart>
+          </ResponsiveContainer></div>
+          <div className="chart-summary"><span>{liveRuns.length} Live provider</span><span>{demoRuns.length} Demo / Mock</span></div>
+        </> : <div className="chart-empty-state" role="status" aria-label="Run volume empty state">
+          <span className="chart-empty-icon"><Activity size={19} /></span>
+          <strong>No evaluation runs yet</strong>
+          <p>Your Live and Demo run history will appear here.</p>
+          <Button variant="primary" size="sm" onClick={() => onNavigate('/evaluations/new')}><FlaskConical size={14} /> Run your first evaluation</Button>
+        </div>}
+      </Card>
     </div>
     <div className="dashboard-lower">
       <Card className="table-card recent-runs"><div className="card-heading"><div><h2>Recent evaluation runs</h2><p>Demo and Live runs are labeled separately</p></div><button className="text-button" onClick={() => onNavigate('/evaluations')}>View all <ArrowRight size={14} /></button></div><RunTable runs={runs.slice(0, 4)} onNavigate={onNavigate} compact /></Card>
@@ -85,7 +130,7 @@ export function DashboardPage({ datasets, cases, runs, failures, onNavigate }: {
     </div>
     <div className="dashboard-bottom">
       <Card className="failed-card"><div className="card-heading"><div><h2>Live evaluation failures</h2><p>Cases from persisted Live provider runs that need a closer look</p></div><Badge tone="red">{pendingFailures.length} unreviewed</Badge></div>{pendingFailures.slice(0, 3).map((failure) => <button className="failure-preview" key={failure.id} onClick={() => onNavigate('/failures')}><span className="failure-alert"><CircleAlert size={15} /></span><span className="failure-preview-copy"><strong>{failure.testCase}</strong><small>{failure.model} · {failure.dataset}</small></span><Badge tone={failure.category === 'Hallucination' ? 'violet' : 'yellow'}>{failure.category}</Badge><ChevronRight size={15} /></button>)}{pendingFailures.length === 0 && <p className="muted-copy">No unreviewed Live provider failures. Nice work.</p>}</Card>
-      <Card className="dataset-summary"><div className="card-heading"><div><h2>Active datasets</h2><p>{datasets.length} datasets · {cases.length} test cases</p></div><button className="text-button" onClick={() => onNavigate('/datasets')}>Manage <ArrowRight size={14} /></button></div>{datasets.slice(0, 4).map((dataset) => <div className="dataset-mini" key={dataset.id}><span className={`dataset-dot ${dataset.color}`} /><span><strong>{dataset.name}</strong><small>{dataset.version} · {dataset.cases} cases</small></span><span className="dataset-mini-date">{new Date(`${dataset.modifiedAt}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></div>)}</Card>
+      <Card className="dataset-summary"><div className="card-heading"><div><h2>Active datasets</h2><p>{datasets.length === 1 ? '1 dataset' : `${datasets.length} datasets`} · {cases.length} test cases</p></div><button className="text-button" onClick={() => onNavigate('/datasets')}>Manage <ArrowRight size={14} /></button></div>{datasets.slice(0, 4).map((dataset) => <div className="dataset-mini" key={dataset.id}><span className={`dataset-dot ${dataset.color}`} /><span><strong>{dataset.name}</strong><small>{dataset.version} · {dataset.cases} cases</small></span><span className="dataset-mini-date">{new Date(`${dataset.modifiedAt}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span></div>)}</Card>
     </div>
   </div>
 }
