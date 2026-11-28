@@ -112,7 +112,7 @@ describe('Dashboard empty states', () => {
     )
 
     expect(screen.getByText('0 failed · 0 live tests')).toBeInTheDocument()
-    expect(screen.getByText('0 datasets')).toBeInTheDocument()
+    expect(screen.getByText('0 Live · 0 Demo · 0 datasets')).toBeInTheDocument()
     expect(screen.getByText('No completed Live runs yet')).toBeInTheDocument()
     expect(screen.getByText('No evaluation runs yet')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Run your first evaluation' })).toHaveLength(2)
@@ -136,7 +136,8 @@ describe('Dashboard empty states', () => {
         <DashboardPage datasets={[dataset]} cases={[]} runs={[]} failures={[]} onNavigate={vi.fn()} />
       </MemoryRouter>,
     )
-    expect(screen.getByText('1 dataset')).toBeInTheDocument()
+    expect(screen.getByText('0 Live · 0 Demo · 1 dataset')).toBeInTheDocument()
+    expect(screen.getByText('1 dataset · 0 test cases')).toBeInTheDocument()
     expect(screen.queryByText('1 datasets')).not.toBeInTheDocument()
   })
 })
